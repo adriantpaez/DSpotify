@@ -15,5 +15,5 @@ func NewContact(id Key, ip net.IP, port int) *Contact {
 }
 
 func (c *Contact) Equal(other *Contact) bool {
-	return c.Id.Equal(&other.Id)
+	return c.Id.Compare(&other.Id) == 0
 }
