@@ -4,7 +4,7 @@ type Bucket []*Contact
 
 func (b Bucket) Contains(c *Contact) int {
 	for i := 0; i < len(b); i++ {
-		if b[i].Equal(c) {
+		if b[i].Compare(c) == 0 {
 			return i
 		}
 	}
