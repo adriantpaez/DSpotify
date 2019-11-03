@@ -14,12 +14,12 @@ func (b Bucket) Contains(c *Contact) int {
 func (b *Bucket) Update(c *Contact) bool {
 	if i := b.Contains(c); i != -1 {
 		updated := Bucket{}
+		updated = append(updated, (*b)[i])
 		for j := 0; j < len(*b); j++ {
 			if j != i {
 				updated = append(updated, (*b)[j])
 			}
 		}
-		updated = append(updated, (*b)[i])
 		*b = updated
 	} else if len(*b) < KSIZE {
 		*b = append(*b, c)

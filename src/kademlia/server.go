@@ -6,24 +6,43 @@ import (
 )
 
 type Server struct {
-	Self    Contact
+	Contact Contact
 	Buckets BucketsTable
 }
 
+type Request struct {
+	Addr   *net.UDPAddr
+	NBytes int
+	Bytes  []byte
+	Obb    []byte
+	Err    error
+}
+
+func NewRequest() *Request {
+	r := Request{
+		Addr:   nil,
+		NBytes: 0,
+		Bytes:  make([]byte, 200),
+		Obb:    make([]byte, 200),
+		Err:    nil,
+	}
+	return &r
+}
+
 func NewServer(key Key, ip net.IP, port int) *Server {
-	server := &Server{Self: Contact{
+	server := &Server{Contact: Contact{
 		Id:   key,
 		Ip:   ip,
 		Port: port,
 	}}
-	server.Buckets = *NewBucketsTable(server.Self)
+	server.Buckets = *NewBucketsTable(server.Contact)
 	return server
 }
 
-func (server *Server) Start() {
+func (server *Server) Start(bridge chan *Request) {
 	ln, err := net.ListenUDP("udp", &net.UDPAddr{
-		IP:   server.Self.Ip,
-		Port: server.Self.Port,
+		IP:   server.Contact.Ip,
+		Port: server.Contact.Port,
 		Zone: "",
 	})
 	if err != nil {
@@ -31,37 +50,41 @@ func (server *Server) Start() {
 		return
 	}
 	for true {
-		addr := &net.UDPAddr{}
-		var n int
-		b := make([]byte, 200)
-		oob := make([]byte, 200)
-		n, _, _, addr, err = ln.ReadMsgUDP(b, oob)
-		go server.handler(*addr, n, b, err)
+		r := NewRequest()
+		r.NBytes, _, _, r.Addr, r.Err = ln.ReadMsgUDP(r.Bytes, r.Obb)
+		bridge <- r
 	}
 }
 
-func (server *Server) handler(addr net.UDPAddr, n int, b []byte, err error) {
+func (server *Server) Consumer(bridge chan *Request) {
+	for true {
+		r := <-bridge
+		if r.Err == nil {
+			go server.handler(r)
+		} else {
+			log.Println(r.Err.Error())
+		}
+	}
+}
+
+func (server *Server) handler(r *Request) {
+	msg, err := Decode(r.Bytes, r.NBytes)
 	if err != nil {
-		log.Println(err.Error())
-	} else {
-		msg, err := Decode(b, n)
-		if err != nil {
-			log.Printf("ERROR: %s\n", err.Error())
-			return
-		}
-		server.Buckets.Update(&msg.Contact)
-		msg.FuncCode = msg.FuncCode % 4
-		switch msg.FuncCode {
-		case 0:
-			Ping(&msg.Contact)
-		case 1:
-			Store(&msg.Contact)
-		case 2:
-			FindNode(&msg.Contact)
-		case 3:
-			FindValue(&msg.Contact)
-		default:
-			log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
-		}
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	server.Buckets.Update(&msg.Contact)
+	msg.FuncCode = msg.FuncCode % 4
+	switch msg.FuncCode {
+	case 0:
+		server.Ping(&msg)
+	case 1:
+		Store(&msg.Contact)
+	case 2:
+		FindNode(&msg.Contact)
+	case 3:
+		FindValue(&msg.Contact)
+	default:
+		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}
 }

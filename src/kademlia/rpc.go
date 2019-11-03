@@ -44,8 +44,8 @@ func Decode(b []byte, end int) (msg Message, err error) {
 	return
 }
 
-func Ping(c *Contact) {
-	log.Printf("<-- %s:%d PING", c.Ip.String(), c.Port)
+func (server *Server) Ping(msg *Message) {
+	log.Printf("<-- %s:%d PING", msg.Contact.Ip.String(), msg.Contact.Port)
 }
 
 func Store(c *Contact) {
