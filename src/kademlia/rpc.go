@@ -1,7 +1,7 @@
 package kademlia
 
 import (
-	"encoding/binary"
+	"encoding/json"
 	"log"
 )
 
@@ -11,41 +11,17 @@ type Message struct {
 	Args     []byte
 }
 
-type DecodeError struct {
-	Message string
-}
-
-func (err DecodeError) Error() string {
-	return err.Message
-}
-
 func Decode(b []byte, end int) (msg Message, err error) {
-	if end < 29 {
-		err = DecodeError{Message: "Short message"}
-		return
-	}
-	err = nil
-	i := 0
-	key := Key{}
-	for ; i < KEYSIZE; i++ {
-		key[i] = b[i]
-	}
-	msg.Contact.Id = key
-	ip := make([]byte, 4)
-	for j := 0; j < 4; j++ {
-		ip[j] = b[i]
-		i++
-	}
-	msg.Contact.Ip = ip
-	port := int(binary.BigEndian.Uint32(b[i : i+4]))
-	msg.Contact.Port = port
-	i += 4
-	msg.FuncCode = b[i]
+	err = json.Unmarshal(b[:end], &msg)
 	return
 }
 
-func (server *Server) Ping(msg *Message) {
-	log.Printf("<-- %s:%d PING", msg.Contact.Ip.String(), msg.Contact.Port)
+func Encode(msg *Message) (b []byte, err error) {
+	return json.Marshal(msg)
+}
+
+func (server *Server) Ping() bool {
+	return true
 }
 
 func Store(c *Contact) {
@@ -58,4 +34,18 @@ func FindNode(c *Contact) {
 
 func FindValue(c *Contact) {
 	log.Printf("<-- %s:%d FIND_VALUE", c.Ip.String(), c.Port)
+}
+
+func (server *Server) SendPing(c *Contact) error {
+	msg := Message{
+		Contact:  server.Contact,
+		FuncCode: 0,
+		Args:     nil,
+	}
+	msgB, err := json.Marshal(&msg)
+	if err != nil {
+		return err
+	}
+	println(string(msgB))
+	return nil
 }
