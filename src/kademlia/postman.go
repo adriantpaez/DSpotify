@@ -26,42 +26,56 @@ func NewBuzon(id int, bufferSize int) *PostBox {
 	}
 }
 
-func (b PostBox) Start(sender *net.UDPAddr, onFree chan *PostBox) {
+func (b PostBox) Start(port int, onFree chan *PostBox) {
 	for {
 		msg := <-b.Message
 		b.Busy = true
-		con, err := net.DialUDP("udp", sender, &msg.Receiver)
+		con, err := net.DialUDP("udp", &net.UDPAddr{
+			IP:   nil,
+			Port: port,
+			Zone: "",
+		}, &msg.Receiver)
+		defer con.Close()
 		if err != nil {
 			log.Println("ERROR on PostBox:", err.Error())
+			b.send(msg, nil, onFree)
 			return
 		}
 		_, _, err = con.WriteMsgUDP(msg.Data, nil, &msg.Receiver)
 		if err != nil {
 			log.Println("ERROR on PostBox:", err.Error())
+			b.send(msg, nil, onFree)
 			return
 		}
 		err = con.SetReadDeadline(time.Now().Add(2 * 1e9))
 		if err != nil {
 			log.Println("ERROR on PostBox:", err.Error())
+			b.send(msg, nil, onFree)
+			return
 		}
 		r := NewRequest()
 		r.NBytes, _, _, r.Addr, r.Err = con.ReadMsgUDP(r.Bytes, r.Obb)
-		msg.ResponseRecipient <- r
-		b.Busy = false
-		onFree <- &b
+		b.send(msg, r, onFree)
 	}
+}
+
+func (b PostBox) send(msg *MessageBinary, r *Request, onFree chan *PostBox) {
+	msg.ResponseRecipient <- r
+	b.Busy = false
+	onFree <- &b
 }
 
 type Postman struct {
 	Queue     chan *MessageBinary
-	Sender    net.UDPAddr
+	Port      int
 	PostBoxes []*PostBox
 }
 
-func NewPostman(bufferSize int, boxCount int) *Postman {
+func NewPostman(bufferSize int, boxCount int, port int) *Postman {
 	p := &Postman{
 		Queue:     make(chan *MessageBinary, bufferSize),
 		PostBoxes: make([]*PostBox, boxCount),
+		Port:      port,
 	}
 	for i := 0; i < len(p.PostBoxes); i++ {
 		p.PostBoxes[i] = NewBuzon(i, bufferSize/boxCount)
@@ -73,9 +87,9 @@ func (p Postman) Start() {
 	boxMap := map[int]net.UDPAddr{}
 	onFree := make(chan *PostBox, len(p.PostBoxes))
 	for i := 0; i < len(p.PostBoxes); i++ {
-		go p.PostBoxes[i].Start(&p.Sender, onFree)
+		onFree <- p.PostBoxes[i]
+		go p.PostBoxes[i].Start(p.Port, onFree)
 	}
-
 	for {
 		msg := <-p.Queue
 		if p.findBusy(msg, boxMap) {

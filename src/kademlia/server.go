@@ -44,7 +44,7 @@ func NewServer(key Key, ip net.IP, inPort int, outPort int) *Server {
 		},
 		InPort:  inPort,
 		OutPort: outPort,
-		Postman: NewPostman(100, 3),
+		Postman: NewPostman(100, 1, outPort),
 	}
 	server.Buckets = *NewBucketsTable(server.Contact)
 	return server
@@ -72,6 +72,7 @@ func (server *Server) start(bridge chan *Request) {
 func (server *Server) Start() {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d OutPort: %d\n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort, server.OutPort)
 	bridge := make(chan *Request)
+	go server.Postman.Start()
 	go server.start(bridge)
 	for true {
 		r := <-bridge
