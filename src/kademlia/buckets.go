@@ -1,5 +1,10 @@
 package kademlia
 
+import (
+	"encoding/hex"
+	"fmt"
+)
+
 type Bucket []*Contact
 
 func (b Bucket) Contains(c *Contact) int {
@@ -62,4 +67,18 @@ func (table BucketsTable) Contains(c *Contact) bool {
 func (table BucketsTable) Update(c *Contact) bool {
 	b := table.FindBucket(c)
 	return b.Update(c)
+}
+
+func (table BucketsTable) Print() {
+	fmt.Println("BUCKETS TABLE")
+	for i := 0; i < len(table.Buckets); i++ {
+		bucket := table.Buckets[i]
+		fmt.Printf("BUCKET %d\n", i)
+		for j := 0; j < len(bucket); i++ {
+			if bucket[i] == nil {
+				break
+			}
+			fmt.Printf("%s  %s  %d\n", hex.EncodeToString(bucket[i].Id[:]), bucket[i].Ip.String(), bucket[i].Port)
+		}
+	}
 }
