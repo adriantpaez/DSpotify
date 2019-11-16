@@ -3,6 +3,7 @@ package kademlia
 import (
 	"encoding/json"
 	"log"
+	"net"
 )
 
 type Message struct {
@@ -37,15 +38,27 @@ func FindValue(c *Contact) {
 }
 
 func (server *Server) SendPing(c *Contact) error {
-	msg := Message{
+	data := Message{
 		Contact:  server.Contact,
 		FuncCode: 0,
 		Args:     nil,
 	}
-	msgB, err := json.Marshal(&msg)
+	dataB, err := json.Marshal(&data)
 	if err != nil {
 		return err
 	}
-	println(string(msgB))
+	responseRecipient := make(chan *Request)
+	msg := MessageBinary{
+		Receiver: net.UDPAddr{
+			IP:   c.Ip,
+			Port: c.Port,
+			Zone: "",
+		},
+		ResponseRecipient: responseRecipient,
+		Data:              dataB,
+	}
+	server.Postman.Send(&msg)
+	resp := <-responseRecipient
+	log.Println(resp)
 	return nil
 }
