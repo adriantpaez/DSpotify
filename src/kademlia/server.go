@@ -90,7 +90,9 @@ func (server *Server) handler(r *Request) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	server.Buckets.Update(&msg.Contact)
+	if !server.Buckets.Update(&msg.Contact) {
+		log.Printf("ERROR: Updating buckets table with %s\n", hex.EncodeToString(msg.Contact.Id[:]))
+	}
 	msg.FuncCode = msg.FuncCode % 4
 	var respB []byte
 	switch msg.FuncCode {
