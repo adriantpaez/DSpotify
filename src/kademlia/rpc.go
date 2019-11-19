@@ -37,16 +37,15 @@ func FindValue(c *Contact) {
 	log.Printf("<-- %s:%d FIND_VALUE", c.Ip.String(), c.Port)
 }
 
-func (server *Server) SendPing(c *Contact) bool {
+func (server Server) SendMessage(c *Contact, funcCode int, args []byte) (*Request, error) {
 	data := Message{
 		Contact:  server.Contact,
 		FuncCode: 0,
-		Args:     nil,
+		Args:     args,
 	}
 	dataB, err := json.Marshal(&data)
 	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return false
+		return nil, err
 	}
 	responseRecipient := make(chan *Request)
 	msg := MessageBinary{
@@ -60,7 +59,14 @@ func (server *Server) SendPing(c *Contact) bool {
 	}
 	server.Postman.Send(&msg)
 	resp := <-responseRecipient
-	if resp.Err != nil {
+	return resp, nil
+}
+
+func (server Server) SendPing(c *Contact) bool {
+	resp, err := server.SendMessage(c, 0, nil)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	} else if resp.Err != nil {
 		log.Printf("ERROR: %s\n", resp.Err.Error())
 	} else {
 		var r bool
