@@ -35,13 +35,12 @@ func (b PostBox) Start(port int, onFree chan *PostBox) {
 			Port: port,
 			Zone: "",
 		}, &msg.Receiver)
-		defer con.Close()
 		if err != nil {
 			log.Println("ERROR on PostBox:", err.Error())
 			b.send(msg, nil, onFree)
 			return
 		}
-		_, _, err = con.WriteMsgUDP(msg.Data, nil, &msg.Receiver)
+		_, _, err = con.WriteMsgUDP(msg.Data, nil, nil)
 		if err != nil {
 			log.Println("ERROR on PostBox:", err.Error())
 			b.send(msg, nil, onFree)
@@ -56,6 +55,7 @@ func (b PostBox) Start(port int, onFree chan *PostBox) {
 		r := NewRequest()
 		r.NBytes, _, _, r.Addr, r.Err = con.ReadMsgUDP(r.Bytes, r.Obb)
 		b.send(msg, r, onFree)
+		con.Close()
 	}
 }
 
