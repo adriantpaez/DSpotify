@@ -25,8 +25,8 @@ func (server *Server) Ping() bool {
 	return true
 }
 
-func Store(c *Contact) {
-	log.Printf("<-- %s:%d STORE", c.Ip.String(), c.Port)
+func Store(args []byte) {
+	log.Println(args)
 }
 
 func FindNode(c *Contact) {
@@ -37,17 +37,20 @@ func FindValue(c *Contact) {
 	log.Printf("<-- %s:%d FIND_VALUE", c.Ip.String(), c.Port)
 }
 
-func (server Server) SendMessage(c *Contact, funcCode int, args []byte) (*Request, error) {
+func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitResponse bool) (*Request, error) {
 	data := Message{
 		Contact:  server.Contact,
-		FuncCode: 0,
+		FuncCode: funcCode,
 		Args:     args,
 	}
 	dataB, err := json.Marshal(&data)
 	if err != nil {
 		return nil, err
 	}
-	responseRecipient := make(chan *Request)
+	var responseRecipient chan *Request = nil
+	if waitResponse {
+		responseRecipient = make(chan *Request)
+	}
 	msg := MessageBinary{
 		Receiver: net.UDPAddr{
 			IP:   c.Ip,
@@ -58,12 +61,15 @@ func (server Server) SendMessage(c *Contact, funcCode int, args []byte) (*Reques
 		Data:              dataB,
 	}
 	server.Postman.Send(&msg)
-	resp := <-responseRecipient
-	return resp, nil
+	if waitResponse {
+		resp := <-responseRecipient
+		return resp, nil
+	}
+	return nil, nil
 }
 
 func (server Server) SendPing(c *Contact) bool {
-	resp, err := server.SendMessage(c, 0, nil)
+	resp, err := server.SendMessage(c, 0, nil, true)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	} else if resp.Err != nil {
@@ -78,4 +84,11 @@ func (server Server) SendPing(c *Contact) bool {
 		}
 	}
 	return false
+}
+
+func (server Server) SendStore(c *Contact, value []byte) {
+	_, err := server.SendMessage(c, 1, value, false)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	}
 }

@@ -110,7 +110,8 @@ func (server *Server) handler(r *Request) {
 			return
 		}
 	case 1:
-		Store(&msg.Contact)
+		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
+		Store(msg.Args)
 	case 2:
 		FindNode(&msg.Contact)
 	case 3:

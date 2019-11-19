@@ -46,15 +46,17 @@ func (b PostBox) Start(port int, onFree chan *PostBox) {
 			b.send(msg, nil, onFree)
 			return
 		}
-		err = con.SetReadDeadline(time.Now().Add(2 * 1e9))
-		if err != nil {
-			log.Println("ERROR on PostBox:", err.Error())
-			b.send(msg, nil, onFree)
-			return
+		if msg.ResponseRecipient != nil {
+			err = con.SetReadDeadline(time.Now().Add(2 * 1e9))
+			if err != nil {
+				log.Println("ERROR on PostBox:", err.Error())
+				b.send(msg, nil, onFree)
+				return
+			}
+			r := NewRequest()
+			r.NBytes, _, _, r.Addr, r.Err = con.ReadMsgUDP(r.Bytes, r.Obb)
+			b.send(msg, r, onFree)
 		}
-		r := NewRequest()
-		r.NBytes, _, _, r.Addr, r.Err = con.ReadMsgUDP(r.Bytes, r.Obb)
-		b.send(msg, r, onFree)
 		con.Close()
 	}
 }
