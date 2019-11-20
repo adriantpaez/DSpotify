@@ -18,7 +18,7 @@ type PostBox struct {
 	Busy    bool
 }
 
-func NewBuzon(id int, bufferSize int) *PostBox {
+func NewPostBox(id int, bufferSize int) *PostBox {
 	return &PostBox{
 		Id:      id,
 		Message: make(chan *MessageBinary, bufferSize),
@@ -50,13 +50,15 @@ func (b PostBox) Start(port int, onFree chan *PostBox) {
 			err = con.SetReadDeadline(time.Now().Add(2 * 1e9))
 			if err != nil {
 				log.Println("ERROR on PostBox:", err.Error())
-				b.send(msg, nil, onFree)
+				msg.ResponseRecipient <- nil
 				return
 			}
 			r := NewRequest()
 			r.NBytes, _, _, r.Addr, r.Err = con.ReadMsgUDP(r.Bytes, r.Obb)
-			b.send(msg, r, onFree)
+			msg.ResponseRecipient <- r
 		}
+		b.Busy = false
+		onFree <- &b
 		con.Close()
 	}
 }
@@ -80,7 +82,7 @@ func NewPostman(bufferSize int, boxCount int, port int) *Postman {
 		Port:      port,
 	}
 	for i := 0; i < len(p.PostBoxes); i++ {
-		p.PostBoxes[i] = NewBuzon(i, bufferSize/boxCount)
+		p.PostBoxes[i] = NewPostBox(i, bufferSize/boxCount)
 	}
 	return p
 }
