@@ -1,6 +1,7 @@
 package kademlia
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net"
@@ -26,7 +27,13 @@ func (server *Server) Ping() bool {
 }
 
 func Store(args []byte) {
-	log.Println(args)
+	storeArgs := StoreArgs{}
+	err := json.Unmarshal(args, &storeArgs)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	log.Printf("STORE Key: %s Value: %s\n", storeArgs.Key, hex.EncodeToString(storeArgs.Value))
 }
 
 func FindNode(c *Contact) {
@@ -86,8 +93,23 @@ func (server Server) SendPing(c *Contact) bool {
 	return false
 }
 
-func (server Server) SendStore(c *Contact, value []byte) {
-	_, err := server.SendMessage(c, 1, value, false)
+type StoreArgs struct {
+	Key   string
+	Value []byte
+}
+
+func (server Server) SendStore(c *Contact, key string, value []byte) {
+	log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, key, hex.EncodeToString(value))
+	args := StoreArgs{
+		Key:   key,
+		Value: value,
+	}
+	argsB, err := json.Marshal(&args)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	_, err = server.SendMessage(c, 1, argsB, false)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	}
