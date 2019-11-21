@@ -90,7 +90,9 @@ func (server *Server) handler(r *Request) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	server.Buckets.Update(&msg.Contact)
+	if !server.Buckets.Update(&msg.Contact) {
+		log.Printf("ERROR: Updating buckets table with %s\n", hex.EncodeToString(msg.Contact.Id[:]))
+	}
 	msg.FuncCode = msg.FuncCode % 4
 	var respB []byte
 	switch msg.FuncCode {
@@ -108,7 +110,8 @@ func (server *Server) handler(r *Request) {
 			return
 		}
 	case 1:
-		Store(&msg.Contact)
+		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
+		Store(msg.Args)
 	case 2:
 		FindNode(&msg.Contact)
 	case 3:

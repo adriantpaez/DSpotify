@@ -1,6 +1,7 @@
 package kademlia
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net"
@@ -25,8 +26,14 @@ func (server *Server) Ping() bool {
 	return true
 }
 
-func Store(c *Contact) {
-	log.Printf("<-- %s:%d STORE", c.Ip.String(), c.Port)
+func Store(args []byte) {
+	storeArgs := StoreArgs{}
+	err := json.Unmarshal(args, &storeArgs)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	log.Printf("STORE Key: %s Value: %s\n", storeArgs.Key, hex.EncodeToString(storeArgs.Value))
 }
 
 func FindNode(c *Contact) {
@@ -37,17 +44,20 @@ func FindValue(c *Contact) {
 	log.Printf("<-- %s:%d FIND_VALUE", c.Ip.String(), c.Port)
 }
 
-func (server *Server) SendPing(c *Contact) error {
+func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitResponse bool) (*Request, error) {
 	data := Message{
 		Contact:  server.Contact,
-		FuncCode: 0,
-		Args:     nil,
+		FuncCode: funcCode,
+		Args:     args,
 	}
 	dataB, err := json.Marshal(&data)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	responseRecipient := make(chan *Request)
+	var responseRecipient chan *Request = nil
+	if waitResponse {
+		responseRecipient = make(chan *Request)
+	}
 	msg := MessageBinary{
 		Receiver: net.UDPAddr{
 			IP:   c.Ip,
@@ -58,7 +68,49 @@ func (server *Server) SendPing(c *Contact) error {
 		Data:              dataB,
 	}
 	server.Postman.Send(&msg)
-	resp := <-responseRecipient
-	log.Println(resp)
-	return nil
+	if waitResponse {
+		resp := <-responseRecipient
+		return resp, nil
+	}
+	return nil, nil
+}
+
+func (server Server) SendPing(c *Contact) bool {
+	resp, err := server.SendMessage(c, 0, nil, true)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	} else if resp.Err != nil {
+		log.Printf("ERROR: %s\n", resp.Err.Error())
+	} else {
+		var r bool
+		err = json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
+		if err != nil {
+			log.Printf("ERROR: %s\n", err.Error())
+		} else {
+			return r
+		}
+	}
+	return false
+}
+
+type StoreArgs struct {
+	Key   string
+	Value []byte
+}
+
+func (server Server) SendStore(c *Contact, key string, value []byte) {
+	log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, key, hex.EncodeToString(value))
+	args := StoreArgs{
+		Key:   key,
+		Value: value,
+	}
+	argsB, err := json.Marshal(&args)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	_, err = server.SendMessage(c, 1, argsB, false)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	}
 }
