@@ -3,6 +3,7 @@ package kademlia
 import (
 	"encoding/hex"
 	"encoding/json"
+	"github.com/rapidloop/skv"
 	"log"
 	"net"
 )
@@ -33,9 +34,10 @@ type Server struct {
 	InPort  int
 	OutPort int
 	Postman *Postman
+	Storage *skv.KVStore
 }
 
-func NewServer(key Key, ip net.IP, inPort int, outPort int) *Server {
+func NewServer(key Key, ip net.IP, inPort int, outPort int, database string) *Server {
 	server := &Server{
 		Contact: Contact{
 			Id:   key,
@@ -47,6 +49,11 @@ func NewServer(key Key, ip net.IP, inPort int, outPort int) *Server {
 		Postman: NewPostman(100, 1, outPort),
 	}
 	server.Buckets = *NewBucketsTable(server.Contact)
+	storage, err := skv.Open(database)
+	if err != nil {
+		log.Printf("ERROR %s\n", err.Error())
+	}
+	server.Storage = storage
 	return server
 }
 
@@ -111,7 +118,7 @@ func (server *Server) handler(r *Request) {
 		}
 	case 1:
 		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
-		Store(msg.Args)
+		server.Store(msg.Args)
 	case 2:
 		FindNode(&msg.Contact)
 	case 3:

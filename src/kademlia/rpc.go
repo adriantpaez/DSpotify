@@ -26,7 +26,7 @@ func (server *Server) Ping() bool {
 	return true
 }
 
-func Store(args []byte) {
+func (server *Server) Store(args []byte) {
 	storeArgs := StoreArgs{}
 	err := json.Unmarshal(args, &storeArgs)
 	if err != nil {
@@ -34,6 +34,10 @@ func Store(args []byte) {
 		return
 	}
 	log.Printf("STORE Key: %s Value: %s\n", storeArgs.Key, hex.EncodeToString(storeArgs.Value))
+	err = server.Storage.Put(storeArgs.Key, storeArgs.Value)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	}
 }
 
 func FindNode(c *Contact) {
