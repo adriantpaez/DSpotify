@@ -5,6 +5,8 @@ import (
 	"fmt"
 )
 
+var server *Server
+
 type Bucket []*Contact
 
 func (b Bucket) Contains(c *Contact) int {
@@ -43,9 +45,10 @@ type BucketsTable struct {
 	Buckets []Bucket
 }
 
-func NewBucketsTable(owner Contact) *BucketsTable {
+func NewBucketsTable(owner *Server) *BucketsTable {
+	server = owner
 	table := BucketsTable{
-		Owner:   owner,
+		Owner:   owner.Contact,
 		Buckets: make([]Bucket, KEYSIZE*8),
 	}
 	for i := 0; i < KEYSIZE*8; i++ {
