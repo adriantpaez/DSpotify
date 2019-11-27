@@ -23,16 +23,16 @@ var endpoints = []EndPoint{
 }
 
 func PrintHead(w *http.ResponseWriter) {
-	fmt.Fprintf(*w, "DSpotify Kademlia Server\nID: %b\n", kademliaServer.Contact.Id[:])
+	fmt.Fprintf(*w, "DSpotify Kademlia Server\nID: %08b\n", kademliaServer.Contact.Id[:])
 	fmt.Fprintf(*w, "IP: %s PORT: %d\n\n", kademliaServer.Contact.Ip, kademliaServer.Contact.Port)
 }
 
 func Buckets(w http.ResponseWriter, req *http.Request) {
 	PrintHead(&w)
 	for i, bucket := range kademliaServer.Buckets.Buckets {
-		fmt.Fprintf(w, "BUCKET %d:\n", i)
+		fmt.Fprintf(w, "BUCKET %3d:\n", i)
 		for j, b := range bucket {
-			fmt.Fprintf(w, "|-- %d %b  %s:%d\n", j, b.Id[:], b.Ip.String(), b.Port)
+			fmt.Fprintf(w, "|-- %3d %08b  %s:%4d\n", j, b.Id[:], b.Ip.String(), b.Port)
 		}
 	}
 }
