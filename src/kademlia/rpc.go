@@ -33,7 +33,7 @@ func (server *Server) Store(args []byte) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	log.Printf("STORE Key: %s Value: %s\n", storeArgs.Key, hex.EncodeToString(storeArgs.Value))
+	log.Printf("STORE %7d bytes with key %s\n", len(storeArgs.Value), storeArgs.Key)
 	err = server.Storage.Put(storeArgs.Key, storeArgs.Value)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
