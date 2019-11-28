@@ -3,7 +3,6 @@ package http_server
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 )
 
 type EndPoint struct {
@@ -40,8 +39,8 @@ func Buckets(w http.ResponseWriter, req *http.Request) {
 func Postman(w http.ResponseWriter, req *http.Request) {
 	PrintHead(&w)
 	fmt.Fprintf(w, "POSTMAN\n")
-	fmt.Fprintf(w, "ID	BUSY	LENGTH\n")
-	for _, postBox := range kademliaServer.Postman.PostBoxes {
-		fmt.Fprintf(w, "%d	%s	%d\n", postBox.Id, strconv.FormatBool(postBox.Busy), len(postBox.Message))
+	fmt.Fprintf(w, "ID			MESSAGES	LAST WRITE\n")
+	for key, value := range kademliaServer.Postman.BoxMap {
+		fmt.Fprintf(w, "%s			%3d	%s\n", key, len(value.Message), value.LastWrite.String())
 	}
 }

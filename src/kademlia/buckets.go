@@ -18,7 +18,7 @@ func (b Bucket) Contains(c *Contact) int {
 	return -1
 }
 
-func (b *Bucket) Update(c *Contact) bool {
+func (b *Bucket) Update(c *Contact) {
 	if i := b.Contains(c); i != -1 {
 		updated := Bucket{}
 		updated = append(updated, (*b)[i])
@@ -30,14 +30,11 @@ func (b *Bucket) Update(c *Contact) bool {
 		*b = updated
 	} else if len(*b) < KSIZE {
 		*b = append(*b, c)
-	} else {
-		// TODO: Run PING for first contact on b
-		// If b[0] is alive
-		// then -> forget c
-		// else -> remove b[0] and append c to end of b
-		return false
+	} else if !server.SendPing(c) {
+		updated := (*b)[1:]
+		updated = append(updated, c)
+		*b = updated
 	}
-	return true
 }
 
 type BucketsTable struct {
@@ -67,9 +64,9 @@ func (table BucketsTable) Contains(c *Contact) bool {
 	return bucket.Contains(c) != -1
 }
 
-func (table BucketsTable) Update(c *Contact) bool {
+func (table BucketsTable) Update(c *Contact) {
 	b := table.FindBucket(c)
-	return b.Update(c)
+	b.Update(c)
 }
 
 func (table BucketsTable) Print() {

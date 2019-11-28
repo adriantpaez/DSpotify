@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+var mapReady chan int
+
 type MessageBinary struct {
 	Receiver          net.UDPAddr
 	ResponseRecipient chan *Request
@@ -13,109 +15,96 @@ type MessageBinary struct {
 }
 
 type PostBox struct {
-	Id      int
-	Message chan *MessageBinary
-	Busy    bool
+	Id        string
+	Conn      *net.UDPConn
+	Message   chan *MessageBinary
+	LastWrite time.Time
 }
 
-func NewPostBox(id int, bufferSize int) *PostBox {
+func NewPostBox(conn *net.UDPConn, bufferSize int) *PostBox {
 	return &PostBox{
-		Id:      id,
+		Id:      conn.RemoteAddr().String(),
+		Conn:    conn,
 		Message: make(chan *MessageBinary, bufferSize),
-		Busy:    false,
 	}
 }
 
-func (b PostBox) Start(port int, onFree chan *PostBox) {
+func (b PostBox) Start(boxMap map[string]*PostBox) {
+	ticker := time.NewTicker(30 * time.Second)
 	for {
-		msg := <-b.Message
-		b.Busy = true
-		con, err := net.DialUDP("udp", &net.UDPAddr{
-			IP:   nil,
-			Port: port,
-			Zone: "",
-		}, &msg.Receiver)
-		if err != nil {
-			log.Println("ERROR on PostBox:", err.Error())
-			b.send(msg, nil, onFree)
-			return
-		}
-		_, _, err = con.WriteMsgUDP(msg.Data, nil, nil)
-		if err != nil {
-			log.Println("ERROR on PostBox:", err.Error())
-			b.send(msg, nil, onFree)
-			return
-		}
-		if msg.ResponseRecipient != nil {
-			err = con.SetReadDeadline(time.Now().Add(2 * 1e9))
+		select {
+		case msg := <-b.Message:
+			_, _, err := b.Conn.WriteMsgUDP(msg.Data, nil, nil)
 			if err != nil {
 				log.Println("ERROR on PostBox:", err.Error())
-				msg.ResponseRecipient <- nil
-				return
+			} else if msg.ResponseRecipient != nil {
+				err = b.Conn.SetReadDeadline(time.Now().Add(time.Second * 3))
+				if err != nil {
+					log.Println("ERROR on PostBox:", err.Error())
+				} else {
+					r := NewRequest()
+					r.NBytes, _, _, r.Addr, r.Err = b.Conn.ReadMsgUDP(r.Bytes, r.Obb)
+					msg.ResponseRecipient <- r
+				}
 			}
-			r := NewRequest()
-			r.NBytes, _, _, r.Addr, r.Err = con.ReadMsgUDP(r.Bytes, r.Obb)
-			msg.ResponseRecipient <- r
+			b.LastWrite = time.Now()
+		case <-ticker.C:
+			<-mapReady
+			if b.LastWrite.Add(30 * time.Second).Before(time.Now()) {
+				err := b.Conn.Close()
+				if err != nil {
+					log.Printf("ERROR: %s\n")
+				} else {
+					delete(boxMap, b.Id)
+				}
+			}
+			mapReady <- 1
 		}
-		b.Busy = false
-		onFree <- &b
-		con.Close()
 	}
-}
-
-func (b PostBox) send(msg *MessageBinary, r *Request, onFree chan *PostBox) {
-	msg.ResponseRecipient <- r
-	b.Busy = false
-	onFree <- &b
 }
 
 type Postman struct {
-	Queue     chan *MessageBinary
-	Port      int
-	PostBoxes []*PostBox
+	Queue  chan *MessageBinary
+	Port   int
+	BoxMap map[string]*PostBox
 }
 
-func NewPostman(bufferSize int, boxCount int, port int) *Postman {
+func NewPostman(bufferSize int, port int) *Postman {
 	p := &Postman{
-		Queue:     make(chan *MessageBinary, bufferSize),
-		PostBoxes: make([]*PostBox, boxCount),
-		Port:      port,
-	}
-	for i := 0; i < len(p.PostBoxes); i++ {
-		p.PostBoxes[i] = NewPostBox(i, bufferSize/boxCount)
+		Queue:  make(chan *MessageBinary, bufferSize),
+		BoxMap: map[string]*PostBox{},
+		Port:   port,
 	}
 	return p
 }
 
 func (p Postman) Start() {
-	boxMap := map[int]net.UDPAddr{}
-	onFree := make(chan *PostBox, len(p.PostBoxes))
-	for i := 0; i < len(p.PostBoxes); i++ {
-		onFree <- p.PostBoxes[i]
-		go p.PostBoxes[i].Start(p.Port, onFree)
-	}
+	mapReady = make(chan int, 1)
+	mapReady <- 1
 	for {
 		msg := <-p.Queue
-		if p.findBusy(msg, boxMap) {
-			continue
+		<-mapReady
+		if value, ok := p.BoxMap[msg.Receiver.String()]; ok {
+			value.Message <- msg
+		} else {
+			conn, err := net.DialUDP("udp", &net.UDPAddr{
+				IP:   nil,
+				Port: p.Port,
+				Zone: "",
+			}, &msg.Receiver)
+			if err != nil {
+				log.Printf("ERROR: %s\n", err.Error())
+			} else {
+				newBox := NewPostBox(conn, 100)
+				newBox.Message <- msg
+				p.BoxMap[msg.Receiver.String()] = newBox
+				go newBox.Start(p.BoxMap)
+			}
 		}
-		b := <-onFree
-		boxMap[b.Id] = msg.Receiver
-		b.Message <- msg
+		mapReady <- 1
 	}
 }
 
 func (p Postman) Send(msg *MessageBinary) {
 	p.Queue <- msg
-}
-
-func (p Postman) findBusy(msg *MessageBinary, boxMap map[int]net.UDPAddr) bool {
-	for i := 0; i < len(p.PostBoxes); i++ {
-		b := p.PostBoxes[i]
-		if b.Busy && boxMap[b.Id].IP.Equal(msg.Receiver.IP) && boxMap[b.Id].Port == msg.Receiver.Port {
-			p.PostBoxes[i].Message <- msg
-			return true
-		}
-	}
-	return false
 }

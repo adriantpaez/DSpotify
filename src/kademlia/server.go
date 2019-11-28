@@ -46,7 +46,7 @@ func NewServer(key Key, ip net.IP, inPort int, outPort int, database string) *Se
 		},
 		InPort:  inPort,
 		OutPort: outPort,
-		Postman: NewPostman(100, 3, outPort),
+		Postman: NewPostman(100, outPort),
 	}
 	server.Buckets = *NewBucketsTable(server)
 	storage, err := skv.Open(database)
@@ -97,7 +97,6 @@ func (server *Server) handler(r *Request) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	server.Buckets.Update(&msg.Contact)
 	msg.FuncCode = msg.FuncCode % 4
 	var respB []byte
 	switch msg.FuncCode {
@@ -124,4 +123,5 @@ func (server *Server) handler(r *Request) {
 	default:
 		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}
+	server.Buckets.Update(&msg.Contact)
 }

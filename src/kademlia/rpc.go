@@ -80,9 +80,12 @@ func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitRe
 }
 
 func (server Server) SendPing(c *Contact) bool {
+	log.Printf("--> %s:%d PING\n", c.Ip.String(), c.Port)
 	resp, err := server.SendMessage(c, 0, nil, true)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
+	} else if resp == nil {
+		return false
 	} else if resp.Err != nil {
 		log.Printf("ERROR: %s\n", resp.Err.Error())
 	} else {
