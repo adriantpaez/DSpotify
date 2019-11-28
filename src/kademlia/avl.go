@@ -140,3 +140,24 @@ func removeBalance(root *AVLNode, dir int) (*AVLNode, bool) {
 	n.Balance = balance
 	return single(root, dir), true
 }
+
+func Max(root *AVLNode) *AVLNode {
+	if root.Link[1] == nil {
+		return root
+	}
+	return Max(root.Link[1])
+}
+
+func (root *AVLNode) PreOrden() <-chan *Contact {
+	var ch = make(chan *Contact)
+	go func() {
+		for node := range root.Link[0].PreOrden() {
+			ch <- node
+		}
+		ch <- root.Data
+		for node := range root.Link[1].PreOrden() {
+			ch <- node
+		}
+	}()
+	return ch
+}

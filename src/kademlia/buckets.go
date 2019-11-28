@@ -82,3 +82,44 @@ func (table BucketsTable) Print() {
 		}
 	}
 }
+
+func max(a int, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func insertBucket(root *AVLNode, key *Key, b *Bucket) int {
+	for k := 0; k < len(*b); k++ {
+		Insert(&root, key.DistanceTo(&(*b)[k].Id), (*b)[k])
+	}
+	return len(*b)
+}
+
+func (table BucketsTable) KNears(key *Key) []*Contact {
+	var root *AVLNode = nil
+	i := table.Owner.Id.CommonPrefixLength(key)
+	count := insertBucket(root, key, &table.Buckets[i])
+
+	for j := 1; count < KSIZE && j < max(i+1, 160-i); j++ {
+		if i-j >= 0 {
+			count += insertBucket(root, key, &table.Buckets[i-j])
+		}
+		if i+j < 160 {
+			count += insertBucket(root, key, &table.Buckets[i+j])
+		}
+	}
+
+	for count > KSIZE {
+		max := Max(root)
+		Remove(&root, max.Key)
+		count -= 1
+	}
+
+	resp := make([]*Contact, count)
+	for contact := range root.PreOrden() {
+		resp = append(resp, contact)
+	}
+	return resp
+}
