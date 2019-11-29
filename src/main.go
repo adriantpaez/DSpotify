@@ -4,13 +4,15 @@ import (
 	http_server "DSpotify/src/http-server"
 	"DSpotify/src/kademlia"
 	"crypto/sha1"
+	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 )
 
 func main() {
-	var idSeed, database string
+	var idSeed, database, ipArg string
 	var inPort, outPort, httpPort int
 	var err error
 	for i := 1; i < len(os.Args)-1; {
@@ -37,6 +39,8 @@ func main() {
 			}
 		case "--database":
 			database = os.Args[i+1]
+		case "--ip":
+			ipArg = os.Args[i+1]
 		default:
 			log.Printf("Unexpected param %s\n", os.Args[i])
 			return
@@ -59,12 +63,20 @@ func main() {
 	if database == "" {
 		database = "database.db"
 	}
+	if ipArg == "" {
+		ipArg = "127.0.0.1"
+	}
+	ip := net.ParseIP(ipArg)
+	if ip == nil {
+		fmt.Printf("ERROR: Invalid IP: %s\n", ipArg)
+		return
+	}
 	//runtime.GOMAXPROCS(9)
 	var key kademlia.Key = sha1.Sum([]byte(idSeed))
-	server := kademlia.NewServer(key, []byte{127, 0, 0, 1}, inPort, outPort, database)
+	server := kademlia.NewServer(key, ip, inPort, outPort, database)
 	httpServer := http_server.HttpServer{
 		Server: *server,
-		Host:   []byte{127, 0, 0, 1},
+		Host:   ip,
 		Port:   httpPort,
 	}
 	go httpServer.Start()
