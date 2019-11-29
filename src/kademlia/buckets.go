@@ -99,15 +99,20 @@ func insertBucket(root *AVLNode, key *Key, b *Bucket) int {
 
 func (table BucketsTable) KNears(key *Key) []*Contact {
 	var root *AVLNode = nil
-	i := table.Owner.Id.CommonPrefixLength(key)
-	count := insertBucket(root, key, &table.Buckets[i])
+	count := 0
+	dist := table.Owner.Id.DistanceTo(key)
 
-	for j := 1; count < KSIZE && j < max(i+1, 160-i); j++ {
-		if i-j >= 0 {
-			count += insertBucket(root, key, &table.Buckets[i-j])
+	for i := 0; count <= KSIZE && i < KEYSIZE*8; i++ {
+		b, _ := dist.GetBit(i)
+		if b == 1 {
+			count += insertBucket(root, key, &table.Buckets[i])
 		}
-		if i+j < 160 {
-			count += insertBucket(root, key, &table.Buckets[i+j])
+	}
+
+	for i := KEYSIZE*8 - 1; count <= KSIZE && i >= 0; i-- {
+		b, _ := dist.GetBit(i)
+		if b == 0 {
+			count += insertBucket(root, key, &table.Buckets[i])
 		}
 	}
 
