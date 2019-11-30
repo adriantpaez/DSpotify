@@ -41,8 +41,19 @@ func (server *Server) Store(args []byte) {
 	}
 }
 
-func FindNode(c *Contact) {
-	log.Printf("<-- %s:%d FIND_NODE", c.Ip.String(), c.Port)
+func (server Server) FindNode(args []byte) []Contact {
+	var key Key
+	err := json.Unmarshal(args, &key)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return []Contact{}
+	}
+	kNears := server.Buckets.KNears(&key)
+	var resp []Contact
+	for _, c := range kNears {
+		resp = append(resp, *c)
+	}
+	return resp
 }
 
 func FindValue(c *Contact) {
@@ -123,7 +134,29 @@ func (server Server) SendStore(c *Contact, key string, value []byte) {
 	}
 }
 
-func (server Server) SendFindNode(to *Contact, c *Contact) []*Contact {
+func (server Server) SendFindNode(c *Contact, key *Key) []*Contact {
+	log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
+	argsB, err := json.Marshal(key)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		return []*Contact{}
+	}
+	resp, err := server.SendMessage(c, 2, argsB, true)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	} else if resp == nil {
+		return []*Contact{}
+	} else if resp.Err != nil {
+		log.Println("ERROR:", resp.Err.Error())
+	} else {
+		var r []*Contact
+		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+		} else {
+			return r
+		}
+	}
 	return []*Contact{}
 }
 
@@ -144,11 +177,7 @@ func (server Server) LookUp(key *Key) []*Contact {
 		for i := 0; tmp != 0 && i < len(result); i++ {
 			if !visit[result[i].Id] {
 				go func(t, k int) {
-					channels[t-1] <- server.SendFindNode(result[k], &Contact{
-						Id:   *key,
-						Ip:   nil,
-						Port: 0,
-					})
+					channels[t-1] <- server.SendFindNode(result[k], key)
 				}(tmp, i)
 				tmp -= 1
 				visit[result[i].Id] = true

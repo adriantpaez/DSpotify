@@ -117,7 +117,18 @@ func (server *Server) handler(r *Request) {
 		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
 		server.Store(msg.Args)
 	case 2:
-		FindNode(&msg.Contact)
+		log.Printf("<-- %s:%d FIND_NODE", msg.Contact.Ip.String(), msg.Contact.Port)
+		resp := server.FindNode(msg.Args)
+		respB, err = json.Marshal(&resp)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
+		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
 	case 3:
 		FindValue(&msg.Contact)
 	default:
