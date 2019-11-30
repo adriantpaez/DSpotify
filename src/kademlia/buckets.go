@@ -1,10 +1,5 @@
 package kademlia
 
-import (
-	"encoding/hex"
-	"fmt"
-)
-
 var server *Server
 
 type Bucket []*Contact
@@ -69,30 +64,9 @@ func (table BucketsTable) Update(c *Contact) {
 	b.Update(c)
 }
 
-func (table BucketsTable) Print() {
-	fmt.Println("BUCKETS TABLE")
-	for i := 0; i < len(table.Buckets); i++ {
-		bucket := table.Buckets[i]
-		fmt.Printf("BUCKET %d\n", i)
-		for j := 0; j < len(bucket); i++ {
-			if bucket[i] == nil {
-				break
-			}
-			fmt.Printf("%s  %s  %d\n", hex.EncodeToString(bucket[i].Id[:]), bucket[i].Ip.String(), bucket[i].Port)
-		}
-	}
-}
-
-func max(a int, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func insertBucket(root *AVLNode, key *Key, b *Bucket) int {
+func insertBucket(root **AVLNode, key *Key, b *Bucket) int {
 	for k := 0; k < len(*b); k++ {
-		Insert(&root, key.DistanceTo(&(*b)[k].Id), (*b)[k])
+		Insert(root, key.DistanceTo(&(*b)[k].Id), (*b)[k])
 	}
 	return len(*b)
 }
@@ -105,14 +79,14 @@ func (table BucketsTable) KNears(key *Key) []*Contact {
 	for i := 0; count <= KSIZE && i < KEYSIZE*8; i++ {
 		b, _ := dist.GetBit(i)
 		if b == 1 {
-			count += insertBucket(root, key, &table.Buckets[i])
+			count += insertBucket(&root, key, &table.Buckets[i])
 		}
 	}
 
 	for i := KEYSIZE*8 - 1; count <= KSIZE && i >= 0; i-- {
 		b, _ := dist.GetBit(i)
 		if b == 0 {
-			count += insertBucket(root, key, &table.Buckets[i])
+			count += insertBucket(&root, key, &table.Buckets[i])
 		}
 	}
 
@@ -121,9 +95,10 @@ func (table BucketsTable) KNears(key *Key) []*Contact {
 		Remove(&root, max.Key)
 		count -= 1
 	}
-
-	resp := make([]*Contact, count)
-	for contact := range root.PreOrden() {
+	resp := []*Contact{}
+	iter := make(chan *Contact)
+	go root.PreOrden(iter)
+	for contact := range iter {
 		resp = append(resp, contact)
 	}
 	return resp

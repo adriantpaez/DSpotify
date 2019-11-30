@@ -88,7 +88,7 @@ func (p Postman) Start() {
 			value.Message <- msg
 		} else {
 			conn, err := net.DialUDP("udp", &net.UDPAddr{
-				IP:   nil,
+				IP:   server.Contact.Ip,
 				Port: p.Port,
 				Zone: "",
 			}, &msg.Receiver)

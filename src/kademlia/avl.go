@@ -148,16 +148,17 @@ func Max(root *AVLNode) *AVLNode {
 	return Max(root.Link[1])
 }
 
-func (root *AVLNode) PreOrden() <-chan *Contact {
-	var ch = make(chan *Contact)
-	go func() {
-		for node := range root.Link[0].PreOrden() {
-			ch <- node
-		}
-		ch <- root.Data
-		for node := range root.Link[1].PreOrden() {
-			ch <- node
-		}
-	}()
-	return ch
+func (root *AVLNode) preOrden(iter chan *Contact) {
+	if root.Link[0] != nil {
+		root.Link[0].preOrden(iter)
+	}
+	iter <- root.Data
+	if root.Link[1] != nil {
+		root.Link[1].preOrden(iter)
+	}
+}
+
+func (root *AVLNode) PreOrden(iter chan *Contact) {
+	root.preOrden(iter)
+	close(iter)
 }

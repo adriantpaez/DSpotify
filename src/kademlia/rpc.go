@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net"
+	"sort"
 )
 
 type Message struct {
@@ -119,5 +120,66 @@ func (server Server) SendStore(c *Contact, key string, value []byte) {
 	_, err = server.SendMessage(c, 1, argsB, false)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
+	}
+}
+
+func (server Server) SendFindNode(to *Contact, c *Contact) []*Contact {
+	return []*Contact{}
+}
+
+func (server Server) LookUp(key *Key) []*Contact {
+	result := server.Buckets.KNears(key)
+	visit := map[Key]bool{}
+
+	for _, c := range result {
+		visit[c.Id] = false
+	}
+
+	for {
+		tmp := 3
+		channels := make([]chan []*Contact, 3)
+		for i := 0; i < len(channels); i++ {
+			channels[i] = make(chan []*Contact)
+		}
+		for i := 0; tmp != 0 && i < len(result); i++ {
+			if !visit[result[i].Id] {
+				go func(t, k int) {
+					channels[t-1] <- server.SendFindNode(result[k], &Contact{
+						Id:   *key,
+						Ip:   nil,
+						Port: 0,
+					})
+				}(tmp, i)
+				tmp -= 1
+				visit[result[i].Id] = true
+			}
+		}
+		if tmp == 3 {
+			return result
+		}
+		newsIndex := len(result)
+		for tmp != 3 {
+			select {
+			case c := <-channels[0]:
+				result = append(result, c...)
+				tmp += 1
+			case c := <-channels[1]:
+				result = append(result, c...)
+				tmp += 1
+			case c := <-channels[2]:
+				result = append(result, c...)
+				tmp += 1
+			}
+		}
+
+		for i := newsIndex; i < len(result); i++ {
+			visit[result[i].Id] = false
+		}
+
+		sort.Slice(result, func(i, j int) bool {
+			distI := result[i].Id.DistanceTo(key)
+			distJ := result[j].Id.DistanceTo(key)
+			return distI.Compare(&distJ) == -1
+		})
 	}
 }
