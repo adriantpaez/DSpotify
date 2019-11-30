@@ -130,7 +130,18 @@ func (server *Server) handler(r *Request) {
 			return
 		}
 	case 3:
-		FindValue(&msg.Contact)
+		log.Printf("<-- %s:%d FIND_VALUE", msg.Contact.Ip.String(), msg.Contact.Port)
+		resp := server.FindValue(msg.Args)
+		respB, err = json.Marshal(&resp)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
+		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
 	default:
 		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}

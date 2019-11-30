@@ -3,6 +3,7 @@ package kademlia
 import (
 	"encoding/hex"
 	"encoding/json"
+	"github.com/rapidloop/skv"
 	"log"
 	"net"
 	"sort"
@@ -56,8 +57,26 @@ func (server Server) FindNode(args []byte) []Contact {
 	return resp
 }
 
-func FindValue(c *Contact) {
-	log.Printf("<-- %s:%d FIND_VALUE", c.Ip.String(), c.Port)
+type FindValueResponse struct {
+	Value  []byte
+	KNears []Contact
+}
+
+func (server Server) FindValue(args []byte) FindValueResponse {
+	resp := FindValueResponse{}
+	var k Key
+	err := json.Unmarshal(args, &k)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	} else if err := server.Storage.Get(hex.EncodeToString(k[:]), &resp.Value); err == skv.ErrNotFound {
+		kNears := server.Buckets.KNears(&k)
+		for _, c := range kNears {
+			resp.KNears = append(resp.KNears, *c)
+		}
+	} else if err != nil {
+		log.Println("ERROR:", err.Error())
+	}
+	return resp
 }
 
 func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitResponse bool) (*Request, error) {
@@ -134,22 +153,22 @@ func (server Server) SendStore(c *Contact, key string, value []byte) {
 	}
 }
 
-func (server Server) SendFindNode(c *Contact, key *Key) []*Contact {
+func (server Server) SendFindNode(c *Contact, key *Key) []Contact {
 	log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
 	argsB, err := json.Marshal(key)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
-		return []*Contact{}
+		return []Contact{}
 	}
 	resp, err := server.SendMessage(c, 2, argsB, true)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	} else if resp == nil {
-		return []*Contact{}
+		return []Contact{}
 	} else if resp.Err != nil {
 		log.Println("ERROR:", resp.Err.Error())
 	} else {
-		var r []*Contact
+		var r []Contact
 		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
 		if err != nil {
 			log.Println("ERROR:", err.Error())
@@ -157,7 +176,33 @@ func (server Server) SendFindNode(c *Contact, key *Key) []*Contact {
 			return r
 		}
 	}
-	return []*Contact{}
+	return []Contact{}
+}
+
+func (server Server) SendFindValue(c *Contact, key *Key) *FindValueResponse {
+	log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
+	argsB, err := json.Marshal(key)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		return nil
+	}
+	resp, err := server.SendMessage(c, 3, argsB, true)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+	} else if resp == nil {
+		return nil
+	} else if resp.Err != nil {
+		log.Println("ERROR:", resp.Err.Error())
+	} else {
+		var r FindValueResponse
+		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+		} else {
+			return &r
+		}
+	}
+	return nil
 }
 
 func (server Server) LookUp(key *Key) []*Contact {
@@ -170,9 +215,9 @@ func (server Server) LookUp(key *Key) []*Contact {
 
 	for {
 		tmp := 3
-		channels := make([]chan []*Contact, 3)
+		channels := make([]chan []Contact, 3)
 		for i := 0; i < len(channels); i++ {
-			channels[i] = make(chan []*Contact)
+			channels[i] = make(chan []Contact)
 		}
 		for i := 0; tmp != 0 && i < len(result); i++ {
 			if !visit[result[i].Id] {
@@ -190,13 +235,19 @@ func (server Server) LookUp(key *Key) []*Contact {
 		for tmp != 3 {
 			select {
 			case c := <-channels[0]:
-				result = append(result, c...)
+				for _, v := range c {
+					result = append(result, &v)
+				}
 				tmp += 1
 			case c := <-channels[1]:
-				result = append(result, c...)
+				for _, v := range c {
+					result = append(result, &v)
+				}
 				tmp += 1
 			case c := <-channels[2]:
-				result = append(result, c...)
+				for _, v := range c {
+					result = append(result, &v)
+				}
 				tmp += 1
 			}
 		}
