@@ -4,6 +4,7 @@ import (
 	http_server "DSpotify/src/http-server"
 	"DSpotify/src/kademlia"
 	"crypto/sha1"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -12,7 +13,7 @@ import (
 )
 
 func main() {
-	var idSeed, database, ipArg string
+	var idSeed, database, ipArg, knownFile string
 	var inPort, outPort, httpPort int
 	var err error
 	for i := 1; i < len(os.Args)-1; {
@@ -41,6 +42,8 @@ func main() {
 			database = os.Args[i+1]
 		case "--ip":
 			ipArg = os.Args[i+1]
+		case "--known":
+			knownFile = os.Args[i+1]
 		default:
 			log.Printf("Unexpected param %s\n", os.Args[i])
 			return
@@ -72,6 +75,27 @@ func main() {
 		return
 	}
 	//runtime.GOMAXPROCS(9)
+	if knownFile != "" {
+		file, err := os.Open(knownFile)
+		if err != nil {
+			fmt.Println("ERROR:", err.Error())
+			return
+		}
+		info, err := file.Stat()
+		if err != nil {
+			fmt.Println("ERROR:", err.Error())
+			return
+		}
+		data := make([]byte, info.Size())
+		file.Read(data)
+		c := kademlia.Contact{}
+		err = json.Unmarshal(data, &c)
+		if err != nil {
+			fmt.Println("ERROR:", err.Error())
+			return
+		}
+		fmt.Println(c)
+	}
 	var key kademlia.Key = sha1.Sum([]byte(idSeed))
 	server := kademlia.NewServer(key, ip, inPort, outPort, database)
 	httpServer := http_server.HttpServer{
