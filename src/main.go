@@ -15,6 +15,7 @@ import (
 func main() {
 	var idSeed, database, ipArg, knownFile string
 	var inPort, outPort, httpPort int
+	var knownContact *kademlia.Contact
 	var err error
 	for i := 1; i < len(os.Args)-1; {
 		switch os.Args[i] {
@@ -94,7 +95,7 @@ func main() {
 			fmt.Println("ERROR:", err.Error())
 			return
 		}
-		fmt.Println(c)
+		knownContact = &c
 	}
 	var key kademlia.Key = sha1.Sum([]byte(idSeed))
 	server := kademlia.NewServer(key, ip, inPort, outPort, database)
@@ -104,6 +105,6 @@ func main() {
 		Port:   httpPort,
 	}
 	go httpServer.Start()
-	server.Start()
+	server.Start(knownContact)
 
 }

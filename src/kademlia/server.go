@@ -3,9 +3,11 @@ package kademlia
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"github.com/rapidloop/skv"
 	"log"
 	"net"
+	"time"
 )
 
 type Request struct {
@@ -20,8 +22,8 @@ func NewRequest() *Request {
 	r := Request{
 		Addr:   nil,
 		NBytes: 0,
-		Bytes:  make([]byte, 1000),
-		Obb:    make([]byte, 1000),
+		Bytes:  make([]byte, 2000),
+		Obb:    make([]byte, 2000),
 		Err:    nil,
 	}
 	return &r
@@ -76,11 +78,23 @@ func (server *Server) start(bridge chan *Request) {
 	}
 }
 
-func (server *Server) Start() {
+func (server *Server) joinToNetwork(known *Contact) {
+	time.Sleep(2 * time.Second)
+	if known == nil {
+		fmt.Println("WARNING: Not known contact")
+		return
+	}
+	fmt.Printf("INFO: Joining to network with known contact: %s\n", fmt.Sprint(*known))
+	server.Buckets.Update(known)
+	server.LookUp(&server.Contact.Id)
+}
+
+func (server *Server) Start(known *Contact) {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d OutPort: %d\n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort, server.OutPort)
 	bridge := make(chan *Request)
 	go server.Postman.Start()
 	go server.start(bridge)
+	go server.joinToNetwork(known)
 	for true {
 		r := <-bridge
 		if r.Err == nil {
