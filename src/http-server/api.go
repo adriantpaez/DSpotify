@@ -1,6 +1,7 @@
 package http_server
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -18,6 +19,10 @@ var endpoints = []EndPoint{
 	{
 		Path:     "/postman",
 		Function: Postman,
+	},
+	{
+		Path:     "/contact",
+		Function: Contact,
 	},
 }
 
@@ -43,4 +48,9 @@ func Postman(w http.ResponseWriter, req *http.Request) {
 	for key, value := range kademliaServer.Postman.BoxMap {
 		fmt.Fprintf(w, "%s			%3d	%s\n", key, len(value.Message), value.LastWrite.String())
 	}
+}
+
+func Contact(w http.ResponseWriter, req *http.Request) {
+	b, _ := json.Marshal(kademliaServer.Contact)
+	fmt.Fprintln(w, string(b))
 }
