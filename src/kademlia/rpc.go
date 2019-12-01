@@ -35,8 +35,8 @@ func (server *Server) Store(args []byte) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	log.Printf("STORE %7d bytes with key %s\n", len(storeArgs.Value), storeArgs.Key)
-	err = server.Storage.Put(storeArgs.Key, storeArgs.Value)
+	log.Printf("STORE %7d bytes with key %s\n", len(storeArgs.Value), hex.EncodeToString(storeArgs.Key[:]))
+	err = server.Storage.Put(hex.EncodeToString(storeArgs.Key[:]), storeArgs.Value)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	}
@@ -132,12 +132,12 @@ func (server Server) SendPing(c *Contact) bool {
 }
 
 type StoreArgs struct {
-	Key   string
+	Key   Key
 	Value []byte
 }
 
-func (server Server) SendStore(c *Contact, key string, value []byte) {
-	log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, key, hex.EncodeToString(value))
+func (server Server) SendStore(c *Contact, key Key, value []byte) {
+	log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
 	args := StoreArgs{
 		Key:   key,
 		Value: value,
@@ -180,7 +180,7 @@ func (server Server) SendFindNode(c *Contact, key *Key) []Contact {
 }
 
 func (server Server) SendFindValue(c *Contact, key *Key) *FindValueResponse {
-	log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
+	log.Printf("--> %s:%d FIND_VALUE Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString((*key)[:]))
 	argsB, err := json.Marshal(key)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
