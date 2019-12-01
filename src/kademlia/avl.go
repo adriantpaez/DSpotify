@@ -149,12 +149,14 @@ func Max(root *AVLNode) *AVLNode {
 }
 
 func (root *AVLNode) preOrden(iter chan *Contact) {
-	if root.Link[0] != nil {
-		root.Link[0].preOrden(iter)
-	}
-	iter <- root.Data
-	if root.Link[1] != nil {
-		root.Link[1].preOrden(iter)
+	if root != nil {
+		if root.Link[0] != nil {
+			root.Link[0].preOrden(iter)
+		}
+		iter <- root.Data
+		if root.Link[1] != nil {
+			root.Link[1].preOrden(iter)
+		}
 	}
 }
 
