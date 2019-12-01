@@ -95,6 +95,11 @@ func (server *Server) Start(known *Contact) {
 	go server.Postman.Start()
 	go server.start(bridge)
 	go server.joinToNetwork(known)
+	SendPing(&server.Contact, &Contact{
+		Id:   Key{},
+		Ip:   []byte{127, 0, 0, 1},
+		Port: 8000,
+	}, server.Postman)
 	for true {
 		r := <-bridge
 		if r.Err == nil {
@@ -114,7 +119,7 @@ func (server *Server) handler(r *Request) {
 	msg.FuncCode = msg.FuncCode % 4
 	var respB []byte
 	switch msg.FuncCode {
-	case 0:
+	case PING:
 		log.Printf("<-- %s:%d PING", msg.Contact.Ip.String(), msg.Contact.Port)
 		resp := server.Ping()
 		respB, err = json.Marshal(&resp)
@@ -127,10 +132,10 @@ func (server *Server) handler(r *Request) {
 			log.Println("ERROR:", err.Error())
 			return
 		}
-	case 1:
+	case STORE:
 		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
 		server.Store(msg.Args)
-	case 2:
+	case FIND_NODE:
 		log.Printf("<-- %s:%d FIND_NODE", msg.Contact.Ip.String(), msg.Contact.Port)
 		resp := server.FindNode(msg.Args)
 		respB, err = json.Marshal(&resp)
@@ -143,7 +148,7 @@ func (server *Server) handler(r *Request) {
 			log.Println("ERROR:", err.Error())
 			return
 		}
-	case 3:
+	case FIND_VALUE:
 		log.Printf("<-- %s:%d FIND_VALUE", msg.Contact.Ip.String(), msg.Contact.Port)
 		resp := server.FindValue(msg.Args)
 		respB, err = json.Marshal(&resp)
@@ -156,6 +161,9 @@ func (server *Server) handler(r *Request) {
 			log.Println("ERROR:", err.Error())
 			return
 		}
+	case STORE_NETWORK:
+		log.Printf("<-- %s:%d STORE_NETWORK", msg.Contact.Ip.String(), msg.Contact.Port)
+		server.StoreNetwork(msg.Args)
 	default:
 		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}

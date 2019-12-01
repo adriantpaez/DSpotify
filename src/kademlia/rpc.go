@@ -9,9 +9,19 @@ import (
 	"sort"
 )
 
+type FuncCode int
+
+const (
+	PING          = 0
+	STORE         = 1
+	FIND_NODE     = 2
+	FIND_VALUE    = 3
+	STORE_NETWORK = 4
+)
+
 type Message struct {
 	Contact  Contact
-	FuncCode uint8
+	FuncCode FuncCode
 	Args     []byte
 }
 
@@ -39,6 +49,20 @@ func (server *Server) Store(args []byte) {
 	err = server.Storage.Put(hex.EncodeToString(storeArgs.Key[:]), storeArgs.Value)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
+	}
+}
+
+func (server *Server) StoreNetwork(args []byte) {
+	storeArgs := StoreArgs{}
+	err := json.Unmarshal(args, &storeArgs)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	log.Printf("STORE_NETWORK %7d bytes with key %s\n", len(storeArgs.Value), hex.EncodeToString(storeArgs.Key[:]))
+	nodes := server.LookUp(&storeArgs.Key)
+	for _, node := range nodes {
+		go SendStore(&server.Contact, node, storeArgs.Key, storeArgs.Value, server.Postman)
 	}
 }
 
@@ -79,7 +103,7 @@ func (server Server) FindValue(args []byte) FindValueResponse {
 	return resp
 }
 
-func SendMessage(from *Contact, c *Contact, funcCode uint8, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
+func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
 	data := Message{
 		Contact:  *from,
 		FuncCode: funcCode,
@@ -112,7 +136,7 @@ func SendMessage(from *Contact, c *Contact, funcCode uint8, args []byte, waitRes
 
 func SendPing(from *Contact, c *Contact, postman *Postman) bool {
 	log.Printf("--> %s:%d PING\n", c.Ip.String(), c.Port)
-	resp, err := SendMessage(from, c, 0, nil, true, postman)
+	resp, err := SendMessage(from, c, PING, nil, true, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	} else if resp == nil {
@@ -147,7 +171,7 @@ func SendStore(from *Contact, c *Contact, key Key, value []byte, postman *Postma
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	_, err = SendMessage(from, c, 1, argsB, false, postman)
+	_, err = SendMessage(from, c, STORE, argsB, false, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	}
@@ -160,7 +184,7 @@ func SendFindNode(from *Contact, c *Contact, key *Key, postman *Postman) []Conta
 		log.Println("ERROR:", err.Error())
 		return []Contact{}
 	}
-	resp, err := SendMessage(from, c, 2, argsB, true, postman)
+	resp, err := SendMessage(from, c, FIND_NODE, argsB, true, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	} else if resp == nil {
@@ -186,7 +210,7 @@ func SendFindValue(from *Contact, c *Contact, key *Key, postman *Postman) *FindV
 		log.Println("ERROR:", err.Error())
 		return nil
 	}
-	resp, err := SendMessage(from, c, 3, argsB, true, postman)
+	resp, err := SendMessage(from, c, FIND_VALUE, argsB, true, postman)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
 	} else if resp == nil {
@@ -203,6 +227,23 @@ func SendFindValue(from *Contact, c *Contact, key *Key, postman *Postman) *FindV
 		}
 	}
 	return nil
+}
+
+func SendStoreNetwork(c *Contact, key *Key, value []byte, postman *Postman) {
+	log.Printf("--> %s:%d STORE_NETWORK Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
+	args := StoreArgs{
+		Key:   *key,
+		Value: value,
+	}
+	argsB, err := json.Marshal(&args)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+		return
+	}
+	_, err = SendMessage(nil, c, STORE_NETWORK, argsB, false, postman)
+	if err != nil {
+		log.Printf("ERROR: %s\n", err.Error())
+	}
 }
 
 func (server Server) LookUp(key *Key) []*Contact {
