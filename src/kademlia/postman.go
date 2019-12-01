@@ -56,6 +56,8 @@ func (b PostBox) Start(boxMap map[string]*PostBox) {
 					log.Printf("ERROR: %s\n")
 				} else {
 					delete(boxMap, b.Id)
+					ticker.Stop()
+					return
 				}
 			}
 			mapReady <- 1
