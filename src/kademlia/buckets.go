@@ -25,7 +25,7 @@ func (b *Bucket) Update(c *Contact) {
 		*b = updated
 	} else if len(*b) < KSIZE {
 		*b = append(*b, c)
-	} else if !server.SendPing(c) {
+	} else if !SendPing(&server.Contact, c, server.Postman) {
 		updated := (*b)[1:]
 		updated = append(updated, c)
 		*b = updated

@@ -79,9 +79,9 @@ func (server Server) FindValue(args []byte) FindValueResponse {
 	return resp
 }
 
-func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitResponse bool) (*Request, error) {
+func SendMessage(from *Contact, c *Contact, funcCode uint8, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
 	data := Message{
-		Contact:  server.Contact,
+		Contact:  *from,
 		FuncCode: funcCode,
 		Args:     args,
 	}
@@ -102,7 +102,7 @@ func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitRe
 		ResponseRecipient: responseRecipient,
 		Data:              dataB,
 	}
-	server.Postman.Send(&msg)
+	postman.Send(&msg)
 	if waitResponse {
 		resp := <-responseRecipient
 		return resp, nil
@@ -110,9 +110,9 @@ func (server Server) SendMessage(c *Contact, funcCode uint8, args []byte, waitRe
 	return nil, nil
 }
 
-func (server Server) SendPing(c *Contact) bool {
+func SendPing(from *Contact, c *Contact, postman *Postman) bool {
 	log.Printf("--> %s:%d PING\n", c.Ip.String(), c.Port)
-	resp, err := server.SendMessage(c, 0, nil, true)
+	resp, err := SendMessage(from, c, 0, nil, true, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	} else if resp == nil {
@@ -136,7 +136,7 @@ type StoreArgs struct {
 	Value []byte
 }
 
-func (server Server) SendStore(c *Contact, key Key, value []byte) {
+func SendStore(from *Contact, c *Contact, key Key, value []byte, postman *Postman) {
 	log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
 	args := StoreArgs{
 		Key:   key,
@@ -147,20 +147,20 @@ func (server Server) SendStore(c *Contact, key Key, value []byte) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	_, err = server.SendMessage(c, 1, argsB, false)
+	_, err = SendMessage(from, c, 1, argsB, false, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	}
 }
 
-func (server Server) SendFindNode(c *Contact, key *Key) []Contact {
+func SendFindNode(from *Contact, c *Contact, key *Key, postman *Postman) []Contact {
 	log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
 	argsB, err := json.Marshal(key)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
 		return []Contact{}
 	}
-	resp, err := server.SendMessage(c, 2, argsB, true)
+	resp, err := SendMessage(from, c, 2, argsB, true, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	} else if resp == nil {
@@ -179,14 +179,14 @@ func (server Server) SendFindNode(c *Contact, key *Key) []Contact {
 	return []Contact{}
 }
 
-func (server Server) SendFindValue(c *Contact, key *Key) *FindValueResponse {
+func SendFindValue(from *Contact, c *Contact, key *Key, postman *Postman) *FindValueResponse {
 	log.Printf("--> %s:%d FIND_VALUE Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString((*key)[:]))
 	argsB, err := json.Marshal(key)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
 		return nil
 	}
-	resp, err := server.SendMessage(c, 3, argsB, true)
+	resp, err := SendMessage(from, c, 3, argsB, true, postman)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
 	} else if resp == nil {
@@ -222,7 +222,7 @@ func (server Server) LookUp(key *Key) []*Contact {
 		for i := 0; tmp != 0 && i < len(result); i++ {
 			if !visit[result[i].Id] {
 				go func(t, k int) {
-					channels[t-1] <- server.SendFindNode(result[k], key)
+					channels[t-1] <- SendFindNode(&server.Contact, result[k], key, server.Postman)
 				}(tmp, i)
 				tmp -= 1
 				visit[result[i].Id] = true
