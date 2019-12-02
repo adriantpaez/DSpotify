@@ -104,6 +104,9 @@ func (server Server) FindValue(args []byte) FindValueResponse {
 }
 
 func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
+	if from == nil {
+		*from = Contact{}
+	}
 	data := Message{
 		Contact:  *from,
 		FuncCode: funcCode,
