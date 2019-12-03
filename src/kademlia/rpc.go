@@ -305,5 +305,8 @@ func (server Server) LookUp(key *Key) []*Contact {
 			distJ := result[j].Id.DistanceTo(key)
 			return distI.Compare(&distJ) == -1
 		})
+		if len(result) > KSIZE {
+			result = result[:KSIZE]
+		}
 	}
 }
