@@ -95,11 +95,6 @@ func (server *Server) Start(known *Contact) {
 	go server.Postman.Start()
 	go server.start(bridge)
 	go server.joinToNetwork(known)
-	SendPing(&server.Contact, &Contact{
-		Id:   Key{},
-		Ip:   []byte{127, 0, 0, 1},
-		Port: 8000,
-	}, server.Postman)
 	for true {
 		r := <-bridge
 		if r.Err == nil {
