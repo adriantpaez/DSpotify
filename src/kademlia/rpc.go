@@ -144,13 +144,13 @@ func (server Server) FindValueNetwork(args []byte) []byte {
 
 func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
 	data := Message{
-		Contact:    *from,
 		FuncCode:   funcCode,
 		Args:       args,
-		SenderType: KADEMLIA_NODE,
+		SenderType: CLIENT,
 	}
-	if from == nil {
-		data.SenderType = CLIENT
+	if from != nil {
+		data.SenderType = KADEMLIA_NODE
+		data.Contact = *from
 	}
 	dataB, err := json.Marshal(&data)
 	if err != nil {
