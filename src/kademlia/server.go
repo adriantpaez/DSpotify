@@ -48,7 +48,7 @@ func NewServer(key Key, ip net.IP, inPort int, outPort int, database string) *Se
 		},
 		InPort:  inPort,
 		OutPort: outPort,
-		Postman: NewPostman(100, outPort),
+		Postman: NewPostman(100, ip, outPort),
 	}
 	server.Buckets = *NewBucketsTable(server)
 	storage, err := skv.Open(database)

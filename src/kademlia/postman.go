@@ -67,15 +67,17 @@ func (b PostBox) Start(boxMap map[string]*PostBox) {
 
 type Postman struct {
 	Queue  chan *MessageBinary
+	IP     net.IP
 	Port   int
 	BoxMap map[string]*PostBox
 }
 
-func NewPostman(bufferSize int, port int) *Postman {
+func NewPostman(bufferSize int, ip net.IP, port int) *Postman {
 	p := &Postman{
 		Queue:  make(chan *MessageBinary, bufferSize),
 		BoxMap: map[string]*PostBox{},
 		Port:   port,
+		IP:     ip,
 	}
 	return p
 }
@@ -90,7 +92,7 @@ func (p Postman) Start() {
 			value.Message <- msg
 		} else {
 			conn, err := net.DialUDP("udp", &net.UDPAddr{
-				IP:   server.Contact.Ip,
+				IP:   p.IP,
 				Port: p.Port,
 				Zone: "",
 			}, &msg.Receiver)
