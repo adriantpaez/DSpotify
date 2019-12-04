@@ -175,5 +175,7 @@ func (server *Server) handler(r *Request) {
 	default:
 		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}
-	server.Buckets.Update(&msg.Contact)
+	if msg.SenderType == KADEMLIA_NODE {
+		server.Buckets.Update(&msg.Contact)
+	}
 }

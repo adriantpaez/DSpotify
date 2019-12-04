@@ -20,10 +20,18 @@ const (
 	FIND_VALUE_NETWORK = 5
 )
 
+type SenderType int
+
+const (
+	KADEMLIA_NODE = 0
+	CLIENT        = 1
+)
+
 type Message struct {
-	Contact  Contact
-	FuncCode FuncCode
-	Args     []byte
+	Contact    Contact
+	FuncCode   FuncCode
+	Args       []byte
+	SenderType SenderType
 }
 
 func Decode(b []byte, end int) (msg Message, err error) {
@@ -135,13 +143,14 @@ func (server Server) FindValueNetwork(args []byte) []byte {
 }
 
 func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
-	if from == nil {
-		*from = Contact{}
-	}
 	data := Message{
-		Contact:  *from,
-		FuncCode: funcCode,
-		Args:     args,
+		Contact:    *from,
+		FuncCode:   funcCode,
+		Args:       args,
+		SenderType: KADEMLIA_NODE,
+	}
+	if from == nil {
+		data.SenderType = CLIENT
 	}
 	dataB, err := json.Marshal(&data)
 	if err != nil {
