@@ -159,6 +159,19 @@ func (server *Server) handler(r *Request) {
 	case STORE_NETWORK:
 		log.Printf("<-- %s:%d STORE_NETWORK", msg.Contact.Ip.String(), msg.Contact.Port)
 		server.StoreNetwork(msg.Args)
+	case FIND_VALUE_NETWORK:
+		log.Printf("<-- %s:%d FIND_VALUE_NETWORK", msg.Contact.Ip.String(), msg.Contact.Port)
+		resp := server.FindValueNetwork(msg.Args)
+		respB, err := json.Marshal(&resp)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
+		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+			return
+		}
 	default:
 		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}
