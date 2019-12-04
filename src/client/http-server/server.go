@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"DSpotify/src/kademlia"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"net"
@@ -11,6 +12,7 @@ type HttpServer struct {
 	Host     net.IP
 	Port     int
 	Database *mongo.Database
+	Kademlia *kademlia.Contact
 }
 
 func (server HttpServer) Start() {
