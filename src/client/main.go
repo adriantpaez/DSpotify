@@ -27,6 +27,7 @@ func main() {
 	var knownFile = flag.String("known", "", "File with known contact for join to network.")
 	kademliaOutPort := flag.Int("kdOutPort", 0, "Port from which to connect to Kadamlia")
 	DatabasePort := flag.Int("dbPort", 0, "Port of known Database server")
+	flag.Parse()
 	if *DatabaseIp == "" {
 		log.Fatal("Empty Database IP")
 	}
