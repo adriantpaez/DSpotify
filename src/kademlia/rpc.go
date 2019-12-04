@@ -12,11 +12,12 @@ import (
 type FuncCode int
 
 const (
-	PING          = 0
-	STORE         = 1
-	FIND_NODE     = 2
-	FIND_VALUE    = 3
-	STORE_NETWORK = 4
+	PING               = 0
+	STORE              = 1
+	FIND_NODE          = 2
+	FIND_VALUE         = 3
+	STORE_NETWORK      = 4
+	FIND_VALUE_NETWORK = 5
 )
 
 type Message struct {
@@ -101,6 +102,36 @@ func (server Server) FindValue(args []byte) FindValueResponse {
 		log.Println("ERROR:", err.Error())
 	}
 	return resp
+}
+
+func (server Server) FindValueNetwork(args []byte) []byte {
+	var k Key
+	err := json.Unmarshal(args, &k)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		return []byte{}
+	}
+	log.Printf("FIND_VALUE_NETWORK Key %s\n", hex.EncodeToString(k[:]))
+	nodes := server.LookUp(&k)
+	resp := make(chan *FindValueResponse)
+	close(resp)
+	count := 0
+	for _, node := range nodes {
+		go func() {
+			r := SendFindValue(&server.Contact, node, &k, server.Postman)
+			resp <- r
+			count += 1
+			if count == len(nodes) {
+				close(resp)
+			}
+		}()
+	}
+	for resp := range resp {
+		if len(resp.Value) != 0 && len(resp.KNears) == 0 {
+			return resp.Value
+		}
+	}
+	return []byte{}
 }
 
 func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
@@ -247,6 +278,22 @@ func SendStoreNetwork(c *Contact, key *Key, value []byte, postman *Postman) {
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
 	}
+}
+
+func SendFindValueNetwork(c *Contact, key *Key, postman *Postman) []byte {
+	log.Printf("--> %s:%d FIND_VALUE_NETWORK Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]))
+	args, err := json.Marshal(key)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		return []byte{}
+	}
+	req, err := SendMessage(nil, c, FIND_VALUE_NETWORK, args, true, postman)
+	if err != nil {
+		log.Println("ERROR:", err.Error())
+		return []byte{}
+	}
+	resp := req.Bytes[:req.NBytes]
+	return resp
 }
 
 func (server Server) LookUp(key *Key) []*Contact {
