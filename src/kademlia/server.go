@@ -111,7 +111,7 @@ func (server *Server) handler(r *Request) {
 		log.Printf("ERROR: %s\n", err.Error())
 		return
 	}
-	msg.FuncCode = msg.FuncCode % 4
+	//msg.FuncCode = msg.FuncCode % 4
 	var respB []byte
 	switch msg.FuncCode {
 	case PING:

@@ -296,13 +296,23 @@ func SendFindValueNetwork(c *Contact, key *Key, postman *Postman) []byte {
 		log.Println("ERROR:", err.Error())
 		return []byte{}
 	}
-	req, err := SendMessage(nil, c, FIND_VALUE_NETWORK, args, true, postman)
+	resp, err := SendMessage(nil, c, FIND_VALUE_NETWORK, args, true, postman)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
-		return []byte{}
+	} else if resp == nil {
+		return nil
+	} else if resp.Err != nil {
+		log.Println("ERROR:", resp.Err.Error())
+	} else {
+		var r []byte
+		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
+		if err != nil {
+			log.Println("ERROR:", err.Error())
+		} else {
+			return r
+		}
 	}
-	resp := req.Bytes[:req.NBytes]
-	return resp
+	return []byte{}
 }
 
 func (server Server) LookUp(key *Key) []*Contact {
