@@ -121,24 +121,21 @@ func (server Server) FindValueNetwork(args []byte) []byte {
 	}
 	log.Printf("FIND_VALUE_NETWORK Key %s\n", hex.EncodeToString(k[:]))
 	nodes := server.LookUp(&k)
-	resp := make(chan *FindValueResponse)
-	close(resp)
-	count := 0
+	resp := make(chan *FindValueResponse, len(nodes))
 	for _, node := range nodes {
 		go func() {
 			r := SendFindValue(&server.Contact, node, &k, server.Postman)
 			resp <- r
-			count += 1
-			if count == len(nodes) {
-				close(resp)
-			}
 		}()
 	}
-	for resp := range resp {
-		if len(resp.Value) != 0 && len(resp.KNears) == 0 {
-			return resp.Value
+	for i := 0; i < len(nodes); i++ {
+		r := <-resp
+		if len(r.Value) != 0 && len(r.KNears) == 0 {
+			close(resp)
+			return r.Value
 		}
 	}
+	close(resp)
 	return []byte{}
 }
 
@@ -178,7 +175,7 @@ func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, wait
 }
 
 func SendPing(from *Contact, c *Contact, postman *Postman) bool {
-	log.Printf("--> %s:%d PING\n", c.Ip.String(), c.Port)
+	//log.Printf("--> %s:%d PING\n", c.Ip.String(), c.Port)
 	resp, err := SendMessage(from, c, PING, nil, true, postman)
 	if err != nil {
 		log.Printf("ERROR: %s\n", err.Error())
@@ -204,7 +201,7 @@ type StoreArgs struct {
 }
 
 func SendStore(from *Contact, c *Contact, key Key, value []byte, postman *Postman) {
-	log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
+	//log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
 	args := StoreArgs{
 		Key:   key,
 		Value: value,
@@ -221,7 +218,7 @@ func SendStore(from *Contact, c *Contact, key Key, value []byte, postman *Postma
 }
 
 func SendFindNode(from *Contact, c *Contact, key *Key, postman *Postman) []Contact {
-	log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
+	//log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
 	argsB, err := json.Marshal(key)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
@@ -247,7 +244,7 @@ func SendFindNode(from *Contact, c *Contact, key *Key, postman *Postman) []Conta
 }
 
 func SendFindValue(from *Contact, c *Contact, key *Key, postman *Postman) *FindValueResponse {
-	log.Printf("--> %s:%d FIND_VALUE Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString((*key)[:]))
+	//log.Printf("--> %s:%d FIND_VALUE Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString((*key)[:]))
 	argsB, err := json.Marshal(key)
 	if err != nil {
 		log.Println("ERROR:", err.Error())
@@ -315,12 +312,17 @@ func SendFindValueNetwork(c *Contact, key *Key, postman *Postman) []byte {
 	return []byte{}
 }
 
-func (server Server) LookUp(key *Key) []*Contact {
-	result := server.Buckets.KNears(key)
-	visit := map[Key]bool{}
+type LookUpContact struct {
+	Contact *Contact
+	Visit   bool
+}
 
-	for _, c := range result {
-		visit[c.Id] = false
+func (server Server) LookUp(key *Key) []*Contact {
+	result := []*LookUpContact{
+		{
+			Contact: &server.Contact,
+			Visit:   false,
+		},
 	}
 
 	for {
@@ -330,45 +332,53 @@ func (server Server) LookUp(key *Key) []*Contact {
 			channels[i] = make(chan []Contact)
 		}
 		for i := 0; tmp != 0 && i < len(result); i++ {
-			if !visit[result[i].Id] {
+			if !result[i].Visit {
 				go func(t, k int) {
-					channels[t-1] <- SendFindNode(&server.Contact, result[k], key, server.Postman)
+					channels[t-1] <- SendFindNode(&server.Contact, result[k].Contact, key, server.Postman)
 				}(tmp, i)
 				tmp -= 1
-				visit[result[i].Id] = true
+				result[i].Visit = true
 			}
 		}
 		if tmp == 3 {
-			return result
+			r := make([]*Contact, len(result))
+			for i, v := range result {
+				r[i] = v.Contact
+			}
+			return r
 		}
-		newsIndex := len(result)
 		for tmp != 3 {
 			select {
 			case c := <-channels[0]:
 				for _, v := range c {
-					result = append(result, &v)
+					result = append(result, &LookUpContact{
+						Contact: &v,
+						Visit:   false,
+					})
 				}
 				tmp += 1
 			case c := <-channels[1]:
 				for _, v := range c {
-					result = append(result, &v)
+					result = append(result, &LookUpContact{
+						Contact: &v,
+						Visit:   false,
+					})
 				}
 				tmp += 1
 			case c := <-channels[2]:
 				for _, v := range c {
-					result = append(result, &v)
+					result = append(result, &LookUpContact{
+						Contact: &v,
+						Visit:   false,
+					})
 				}
 				tmp += 1
 			}
 		}
 
-		for i := newsIndex; i < len(result); i++ {
-			visit[result[i].Id] = false
-		}
-
 		sort.Slice(result, func(i, j int) bool {
-			distI := result[i].Id.DistanceTo(key)
-			distJ := result[j].Id.DistanceTo(key)
+			distI := result[i].Contact.Id.DistanceTo(key)
+			distJ := result[j].Contact.Id.DistanceTo(key)
 			return distI.Compare(&distJ) == -1
 		})
 		if len(result) > KSIZE {

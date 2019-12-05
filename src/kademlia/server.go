@@ -115,7 +115,7 @@ func (server *Server) handler(r *Request) {
 	var respB []byte
 	switch msg.FuncCode {
 	case PING:
-		log.Printf("<-- %s:%d PING", msg.Contact.Ip.String(), msg.Contact.Port)
+		//log.Printf("<-- %s:%d PING", msg.Contact.Ip.String(), msg.Contact.Port)
 		resp := server.Ping()
 		respB, err = json.Marshal(&resp)
 		if err != nil {
@@ -128,10 +128,10 @@ func (server *Server) handler(r *Request) {
 			return
 		}
 	case STORE:
-		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
+		//log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
 		server.Store(msg.Args)
 	case FIND_NODE:
-		log.Printf("<-- %s:%d FIND_NODE", msg.Contact.Ip.String(), msg.Contact.Port)
+		//log.Printf("<-- %s:%d FIND_NODE", msg.Contact.Ip.String(), msg.Contact.Port)
 		resp := server.FindNode(msg.Args)
 		respB, err = json.Marshal(&resp)
 		if err != nil {
@@ -144,7 +144,7 @@ func (server *Server) handler(r *Request) {
 			return
 		}
 	case FIND_VALUE:
-		log.Printf("<-- %s:%d FIND_VALUE", msg.Contact.Ip.String(), msg.Contact.Port)
+		//log.Printf("<-- %s:%d FIND_VALUE", msg.Contact.Ip.String(), msg.Contact.Port)
 		resp := server.FindValue(msg.Args)
 		respB, err = json.Marshal(&resp)
 		if err != nil {
@@ -175,7 +175,7 @@ func (server *Server) handler(r *Request) {
 	default:
 		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
 	}
-	if msg.SenderType == KADEMLIA_NODE {
+	if msg.SenderType == KADEMLIA_NODE && msg.Contact.Id.Compare(&server.Contact.Id) != 0 {
 		server.Buckets.Update(&msg.Contact)
 	}
 }
