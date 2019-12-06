@@ -17,10 +17,6 @@ var endpoints = []EndPoint{
 		Function: Buckets,
 	},
 	{
-		Path:     "/postman",
-		Function: Postman,
-	},
-	{
 		Path:     "/contact",
 		Function: Contact,
 	},
@@ -38,15 +34,6 @@ func Buckets(w http.ResponseWriter, req *http.Request) {
 		for j, b := range bucket {
 			fmt.Fprintf(w, "|-- %3d %08b  %s:%4d\n", j, b.Id[:], b.Ip.String(), b.Port)
 		}
-	}
-}
-
-func Postman(w http.ResponseWriter, req *http.Request) {
-	PrintHead(&w)
-	fmt.Fprintf(w, "POSTMAN\n")
-	fmt.Fprintf(w, "ID			MESSAGES	LAST WRITE\n")
-	for key, value := range kademliaServer.Postman.BoxMap {
-		fmt.Fprintf(w, "%s			%3d	%s\n", key, len(value.Message), value.LastWrite.String())
 	}
 }
 

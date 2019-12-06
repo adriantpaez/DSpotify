@@ -2,11 +2,12 @@ package kademlia
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/rapidloop/skv"
 	"log"
 	"net"
+	"net/http"
+	"net/rpc"
 	"time"
 )
 
@@ -32,23 +33,19 @@ func NewRequest() *Request {
 type Server struct {
 	Contact Contact
 	Buckets BucketsTable
-	Conn    *net.UDPConn
 	InPort  int
-	OutPort int
-	Postman *Postman
 	Storage *skv.KVStore
+	Clients *ClientsManager
 }
 
-func NewServer(key Key, ip net.IP, inPort int, outPort int, database string) *Server {
+func NewServer(key Key, ip net.IP, inPort int, database string) *Server {
 	server := &Server{
 		Contact: Contact{
 			Id:   key,
 			Ip:   ip,
 			Port: inPort,
 		},
-		InPort:  inPort,
-		OutPort: outPort,
-		Postman: NewPostman(100, ip, outPort),
+		InPort: inPort,
 	}
 	server.Buckets = *NewBucketsTable(server)
 	storage, err := skv.Open(database)
@@ -59,27 +56,22 @@ func NewServer(key Key, ip net.IP, inPort int, outPort int, database string) *Se
 	return server
 }
 
-func (server *Server) start(bridge chan *Request) {
-	ln, err := net.ListenUDP("udp", &net.UDPAddr{
-		IP:   server.Contact.Ip,
-		Port: server.Contact.Port,
-		Zone: "",
-	})
+func (server *Server) startRPC() {
+	rpcServer := new(RPCServer)
+	rpc.Register(rpcServer)
+	rpc.HandleHTTP()
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", server.Contact.Ip.String(), server.Contact.Port))
 	if err != nil {
-		log.Println("ERROR:", err.Error())
-		return
+		log.Fatal("Starting RPC-server -listen error:", err)
 	}
-	server.Conn = ln
-
-	for true {
-		r := NewRequest()
-		r.NBytes, _, _, r.Addr, r.Err = ln.ReadMsgUDP(r.Bytes, r.Obb)
-		bridge <- r
+	err = http.Serve(ln, nil)
+	if err != nil {
+		log.Fatal("Starting RPC-server -serve error:", err)
 	}
 }
 
 func (server *Server) joinToNetwork(known *Contact) {
-	time.Sleep(2 * time.Second)
+	time.Sleep(5 * time.Second)
 	if known == nil {
 		fmt.Println("WARNING: Not known contact")
 		return
@@ -90,92 +82,10 @@ func (server *Server) joinToNetwork(known *Contact) {
 }
 
 func (server *Server) Start(known *Contact) {
-	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d OutPort: %d\n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort, server.OutPort)
-	bridge := make(chan *Request)
-	go server.Postman.Start()
-	go server.start(bridge)
+	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d \n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort)
+	InitClientsManager()
+	server.Clients = &clientsManager
 	go server.joinToNetwork(known)
-	for true {
-		r := <-bridge
-		if r.Err == nil {
-			go server.handler(r)
-		} else {
-			log.Println(r.Err.Error())
-		}
-	}
-}
+	server.startRPC()
 
-func (server *Server) handler(r *Request) {
-	msg, err := Decode(r.Bytes, r.NBytes)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return
-	}
-	//msg.FuncCode = msg.FuncCode % 4
-	var respB []byte
-	switch msg.FuncCode {
-	case PING:
-		log.Printf("<-- %s:%d PING", msg.Contact.Ip.String(), msg.Contact.Port)
-		resp := server.Ping()
-		respB, err = json.Marshal(&resp)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-	case STORE:
-		log.Printf("<-- %s:%d STORE", msg.Contact.Ip.String(), msg.Contact.Port)
-		server.Store(msg.Args)
-	case FIND_NODE:
-		log.Printf("<-- %s:%d FIND_NODE", msg.Contact.Ip.String(), msg.Contact.Port)
-		resp := server.FindNode(msg.Args)
-		respB, err = json.Marshal(&resp)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-	case FIND_VALUE:
-		log.Printf("<-- %s:%d FIND_VALUE", msg.Contact.Ip.String(), msg.Contact.Port)
-		resp := server.FindValue(msg.Args)
-		respB, err = json.Marshal(&resp)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-	case STORE_NETWORK:
-		log.Printf("<-- %s:%d STORE_NETWORK", msg.Contact.Ip.String(), msg.Contact.Port)
-		server.StoreNetwork(msg.Args)
-	case FIND_VALUE_NETWORK:
-		log.Printf("<-- %s:%d FIND_VALUE_NETWORK", msg.Contact.Ip.String(), msg.Contact.Port)
-		resp := server.FindValueNetwork(msg.Args)
-		respB, err := json.Marshal(&resp)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-		_, _, err = server.Conn.WriteMsgUDP(respB, nil, r.Addr)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-			return
-		}
-	default:
-		log.Printf("ERROR: Unexpected function code %d\n", msg.FuncCode)
-	}
-	if msg.SenderType == KADEMLIA_NODE {
-		server.Buckets.Update(&msg.Contact)
-	}
 }
