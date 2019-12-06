@@ -279,19 +279,12 @@ type LookUpContact struct {
 }
 
 func InsertLC(set *[]*LookUpContact, c *LookUpContact) {
-	left := 0
-	rigth := len(*set) - 1
-	for left != rigth {
-		middle := (left + rigth) / 2
-		if (*set)[middle].Contact.Id.Compare(&c.Contact.Id) == -1 {
-			left = middle + 1
-		} else {
-			rigth = middle
+	for i := 0; i < len(*set); i++ {
+		if (*set)[i].Contact.Id.Compare(&c.Contact.Id) == 0 {
+			return
 		}
 	}
-	if (*set)[left].Contact.Id.Compare(&c.Contact.Id) != 0 {
-		*set = append(*set, c)
-	}
+	*set = append(*set, c)
 }
 
 func (server Server) LookUp(key *Key) []*Contact {
@@ -327,25 +320,25 @@ func (server Server) LookUp(key *Key) []*Contact {
 		for tmp != 3 {
 			select {
 			case c := <-channels[0]:
-				for _, v := range c {
+				for j := 0; j < len(c); j++ {
 					InsertLC(&result, &LookUpContact{
-						Contact: &v,
+						Contact: &c[j],
 						Visit:   false,
 					})
 				}
 				tmp += 1
 			case c := <-channels[1]:
-				for _, v := range c {
+				for j := 0; j < len(c); j++ {
 					InsertLC(&result, &LookUpContact{
-						Contact: &v,
+						Contact: &c[j],
 						Visit:   false,
 					})
 				}
 				tmp += 1
 			case c := <-channels[2]:
-				for _, v := range c {
+				for j := 0; j < len(c); j++ {
 					InsertLC(&result, &LookUpContact{
-						Contact: &v,
+						Contact: &c[j],
 						Visit:   false,
 					})
 				}
