@@ -25,7 +25,7 @@ func (b *Bucket) Update(c *Contact) {
 		*b = updated
 	} else if len(*b) < KSIZE {
 		*b = append(*b, c)
-	} else if !SendPing(&server.Contact, c, server.Postman) {
+	} else if !SendPing(&server.Contact, c) {
 		updated := (*b)[1:]
 		updated = append(updated, c)
 		*b = updated
@@ -60,8 +60,10 @@ func (table BucketsTable) Contains(c *Contact) bool {
 }
 
 func (table BucketsTable) Update(c *Contact) {
-	b := table.FindBucket(c)
-	b.Update(c)
+	if c.Id.Compare(&table.Owner.Id) != 0 {
+		b := table.FindBucket(c)
+		b.Update(c)
+	}
 }
 
 func insertBucket(root **AVLNode, key *Key, b *Bucket) int {
