@@ -273,7 +273,7 @@ func SendFindValue(from *Contact, c *Contact, key *Key, postman *Postman) *FindV
 }
 
 func SendStoreNetwork(c *Contact, key *Key, value []byte, postman *Postman) {
-	log.Printf("--> %s:%d STORE_NETWORK Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
+	//log.Printf("--> %s:%d STORE_NETWORK Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
 	args := StoreArgs{
 		Key:   *key,
 		Value: value,

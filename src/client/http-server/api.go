@@ -7,15 +7,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 type EndPoint struct {
 	Path     string
 	Function func(http.ResponseWriter, *http.Request)
 }
-
-var database *mongo.Database
 
 var endpoints = []EndPoint{
 	{
@@ -38,19 +35,25 @@ var endpoints = []EndPoint{
 
 func StoreArtistHandler(w http.ResponseWriter, req *http.Request) {
 	artist := getParameterFromQuery(req, "artist")
-	result, err := db.StoreArtist(database, db.Artist{Name: artist})
+	result, err := db.StoreArtist(server.Database, db.Artist{Name: artist})
 	sendResponse(result, err, &w)
 }
 
 func StoreSongHandler(w http.ResponseWriter, req *http.Request) {
 	title := getParameterFromQuery(req, "song")
+	filepath := getParameterFromQuery(req, "file")
 	artist := getParameterFromQuery(req, "artist")
-	blocks := getParameterFromQuery(req, "blocks")
 	hexId, _ := primitive.ObjectIDFromHex(artist)
-	intBlocks, _ := strconv.Atoi(blocks)
-	result, err := db.StoreSong(database, db.Song{Title: title, KademliaBlocks: intBlocks, ArtistId: hexId})
+	song := db.Song{
+		ArtistId: hexId,
+		Title:    title,
+	}
+	err := UploadSong(song, filepath)
+	var result *mongo.InsertOneResult
+	if err == nil {
+		result, err = db.StoreSong(server.Database, song)
+	}
 	sendResponse(result, err, &w)
-
 }
 
 func sendResponse(result interface{}, err error, w *http.ResponseWriter) {
@@ -65,14 +68,14 @@ func sendResponse(result interface{}, err error, w *http.ResponseWriter) {
 }
 
 func ListArtistsHandler(w http.ResponseWriter, req *http.Request) {
-	result, err := db.ListArtists(database)
+	result, err := db.ListArtists(server.Database)
 	sendResponse(result, err, &w)
 }
 
 func FindSongByArtistHandler(w http.ResponseWriter, req *http.Request) {
 	artistId := getParameterFromQuery(req, "artistId")
 	hexId, _ := primitive.ObjectIDFromHex(artistId)
-	result, err := db.FindSongByArtist(database, hexId)
+	result, err := db.FindSongByArtist(server.Database, hexId)
 	sendResponse(result, err, &w)
 }
 
