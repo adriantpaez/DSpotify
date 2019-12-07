@@ -17,13 +17,12 @@ func main() {
 	var ipArg = flag.String("ip", "127.0.0.1", "The IP of the node.")
 	var knownFile = flag.String("known", "", "File with known contact for join to network.")
 	var inPort = flag.Int("inPort", 8000, "Input port for listen all RPC requests.")
-	var outPort = flag.Int("outPort", 8001, "Output port for send all RPC requests.")
 	var httpPort = flag.Int("httpPort", 8080, "Port for listen requests to web API.")
 	flag.Parse()
 
 	ip := net.ParseIP(*ipArg)
 	if ip == nil {
-		fmt.Printf("ERROR: Invalid IP: %s\n", ipArg)
+		fmt.Printf("ERROR: Invalid IP: %s\n", *ipArg)
 		return
 	}
 
@@ -40,14 +39,15 @@ func main() {
 			return
 		}
 		data := make([]byte, info.Size())
-		file.Read(data)
-		c := kademlia.Contact{}
-		err = json.Unmarshal(data, &c)
-		if err != nil {
-			fmt.Println("ERROR:", err.Error())
-			return
+		if _, err := file.Read(data); err == nil {
+			c := kademlia.Contact{}
+			err = json.Unmarshal(data, &c)
+			if err == nil {
+				knownContact = &c
+			} else {
+				fmt.Println("ERROR:", err.Error())
+			}
 		}
-		knownContact = &c
 	}
 
 	if *idSeed == "" {
@@ -56,7 +56,7 @@ func main() {
 	}
 
 	var key kademlia.Key = sha1.Sum([]byte(*idSeed))
-	server := kademlia.NewServer(key, ip, *inPort, *outPort, *database)
+	server := kademlia.NewServer(key, ip, *inPort, *database)
 	httpServer := http_server.HttpServer{
 		Server: *server,
 		Host:   ip,

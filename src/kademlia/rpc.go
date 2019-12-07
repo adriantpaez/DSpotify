@@ -2,92 +2,91 @@ package kademlia
 
 import (
 	"encoding/hex"
-	"encoding/json"
+	"fmt"
 	"github.com/rapidloop/skv"
 	"log"
-	"net"
+	"net/rpc"
 	"sort"
+	"time"
 )
 
-type FuncCode int
+var clientsManager ClientsManager
 
-const (
-	PING               = 0
-	STORE              = 1
-	FIND_NODE          = 2
-	FIND_VALUE         = 3
-	STORE_NETWORK      = 4
-	FIND_VALUE_NETWORK = 5
-)
-
-type SenderType int
-
-const (
-	KADEMLIA_NODE = 0
-	CLIENT        = 1
-)
-
-type Message struct {
-	Contact    Contact
-	FuncCode   FuncCode
-	Args       []byte
-	SenderType SenderType
+type ClientState struct {
+	Client  *rpc.Client
+	LastUse time.Time
 }
 
-func Decode(b []byte, end int) (msg Message, err error) {
-	err = json.Unmarshal(b[:end], &msg)
-	return
+type ClientsManager struct {
+	Clients map[string]*ClientState
+	Lock    chan bool
 }
 
-func Encode(msg *Message) (b []byte, err error) {
-	return json.Marshal(msg)
+func InitClientsManager() {
+	clientsManager.Clients = make(map[string]*ClientState)
+	clientsManager.Lock = make(chan bool, 1)
+	clientsManager.Lock <- true
 }
 
-func (server *Server) Ping() bool {
-	return true
-}
-
-func (server *Server) Store(args []byte) {
-	storeArgs := StoreArgs{}
-	err := json.Unmarshal(args, &storeArgs)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return
+func (m *ClientsManager) GetClient(c *Contact) (*rpc.Client, error) {
+	<-m.Lock
+	key := fmt.Sprintf("%s:%d", c.Ip.String(), c.Port)
+	if client, ok := m.Clients[key]; ok {
+		m.Lock <- true
+		return client.Client, nil
 	}
-	log.Printf("STORE %7d bytes with key %s\n", len(storeArgs.Value), hex.EncodeToString(storeArgs.Key[:]))
-	err = server.Storage.Put(hex.EncodeToString(storeArgs.Key[:]), storeArgs.Value)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", c.Ip.String(), c.Port))
+	if err == nil {
+		m.Clients[key] = &ClientState{
+			Client:  client,
+			LastUse: time.Now(),
+		}
 	}
+	m.Lock <- true
+	return client, err
 }
 
-func (server *Server) StoreNetwork(args []byte) {
-	storeArgs := StoreArgs{}
-	err := json.Unmarshal(args, &storeArgs)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return
-	}
-	log.Printf("STORE_NETWORK %7d bytes with key %s\n", len(storeArgs.Value), hex.EncodeToString(storeArgs.Key[:]))
-	nodes := server.LookUp(&storeArgs.Key)
-	for _, node := range nodes {
-		go SendStore(&server.Contact, node, storeArgs.Key, storeArgs.Value, server.Postman)
+func (m *ClientsManager) Cleaner() {
+	for {
+		time.Sleep(30 * time.Second)
+		<-m.Lock
+		var remove []string
+		for key, value := range m.Clients {
+			if value.LastUse.Add(30 * time.Second).Before(time.Now()) {
+				if err := value.Client.Close(); err == nil {
+					remove = append(remove, key)
+				}
+			}
+		}
+		for _, k := range remove {
+			delete(m.Clients, k)
+		}
+		m.Lock <- true
 	}
 }
 
-func (server Server) FindNode(args []byte) []Contact {
-	var key Key
-	err := json.Unmarshal(args, &key)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return []Contact{}
-	}
-	kNears := server.Buckets.KNears(&key)
-	var resp []Contact
-	for _, c := range kNears {
-		resp = append(resp, *c)
-	}
-	return resp
+type RPCServer struct{}
+
+type PingArgs struct {
+	Contact Contact
+}
+
+type PingFromClientArgs struct{}
+
+type StoreArgs struct {
+	Contact Contact
+	Key     Key
+	Value   []byte
+}
+
+type FindNodeArgs struct {
+	Contact Contact
+	Key     Key
+}
+
+type FindValueArgs struct {
+	Contact Contact
+	Key     Key
 }
 
 type FindValueResponse struct {
@@ -95,226 +94,197 @@ type FindValueResponse struct {
 	KNears []Contact
 }
 
-func (server Server) FindValue(args []byte) FindValueResponse {
-	resp := FindValueResponse{}
-	var k Key
-	err := json.Unmarshal(args, &k)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-	} else if err := server.Storage.Get(hex.EncodeToString(k[:]), &resp.Value); err == skv.ErrNotFound {
-		kNears := server.Buckets.KNears(&k)
-		for _, c := range kNears {
-			resp.KNears = append(resp.KNears, *c)
-		}
-	} else if err != nil {
-		log.Println("ERROR:", err.Error())
-	}
-	return resp
+func (rpc *RPCServer) Ping(args *PingArgs, reply *bool) error {
+	server.Buckets.Update(&args.Contact)
+	*reply = true
+	return nil
 }
 
-func (server Server) FindValueNetwork(args []byte) []byte {
-	var k Key
-	err := json.Unmarshal(args, &k)
+func (rpc *RPCServer) PingFromClient(args *PingFromClientArgs, reply *bool) error {
+	*reply = true
+	return nil
+}
+
+func (rpc *RPCServer) Store(args *StoreArgs, reply *bool) error {
+	server.Buckets.Update(&args.Contact)
+	err := server.Storage.Put(hex.EncodeToString(args.Key[:]), args.Value)
 	if err != nil {
-		log.Println("ERROR:", err.Error())
-		return []byte{}
+		*reply = false
+		fmt.Println(err.Error())
 	}
-	log.Printf("FIND_VALUE_NETWORK Key %s\n", hex.EncodeToString(k[:]))
-	nodes := server.LookUp(&k)
-	resp := make(chan *FindValueResponse, len(nodes))
-	for _, node := range nodes {
-		go func() {
-			r := SendFindValue(&server.Contact, node, &k, server.Postman)
-			resp <- r
-		}()
-	}
+	*reply = true
+	return nil
+}
+
+func (rpc *RPCServer) StoreNetwork(args *StoreArgs, reply *bool) error {
+	log.Printf("STORE_NETWORK %7d bytes with key %s\n", len(args.Value), hex.EncodeToString(args.Key[:]))
+	*reply = false
+	nodes := server.LookUp(&args.Key)
+	count := len(nodes)
+	resp := make(chan bool, count)
 	for i := 0; i < len(nodes); i++ {
+		go func(i int) {
+			resp <- SendStore(&server.Contact, nodes[i], args.Key, args.Value)
+		}(i)
+	}
+	for count != 0 {
 		r := <-resp
-		if len(r.Value) != 0 && len(r.KNears) == 0 {
-			close(resp)
-			return r.Value
+		if r {
+			*reply = true
+			break
 		}
+		count--
 	}
-	close(resp)
-	return []byte{}
+	return nil
 }
 
-func SendMessage(from *Contact, c *Contact, funcCode FuncCode, args []byte, waitResponse bool, postman *Postman) (*Request, error) {
-	data := Message{
-		FuncCode:   funcCode,
-		Args:       args,
-		SenderType: CLIENT,
+func (rpc *RPCServer) FindNode(args *FindNodeArgs, reply *[]Contact) error {
+	server.Buckets.Update(&args.Contact)
+	kNears := server.Buckets.KNears(&args.Key)
+	for _, c := range kNears {
+		*reply = append(*reply, *c)
 	}
-	if from != nil {
-		data.SenderType = KADEMLIA_NODE
-		data.Contact = *from
-	}
-	dataB, err := json.Marshal(&data)
-	if err != nil {
-		return nil, err
-	}
-	var responseRecipient chan *Request = nil
-	if waitResponse {
-		responseRecipient = make(chan *Request)
-	}
-	msg := MessageBinary{
-		Receiver: net.UDPAddr{
-			IP:   c.Ip,
-			Port: c.Port,
-			Zone: "",
-		},
-		ResponseRecipient: responseRecipient,
-		Data:              dataB,
-	}
-	postman.Send(&msg)
-	if waitResponse {
-		resp := <-responseRecipient
-		return resp, nil
-	}
-	return nil, nil
+	return nil
 }
 
-func SendPing(from *Contact, c *Contact, postman *Postman) bool {
-	//log.Printf("--> %s:%d PING\n", c.Ip.String(), c.Port)
-	resp, err := SendMessage(from, c, PING, nil, true, postman)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-	} else if resp == nil {
-		return false
-	} else if resp.Err != nil {
-		log.Printf("ERROR: %s\n", resp.Err.Error())
-	} else {
-		var r bool
-		err = json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
-		if err != nil {
-			log.Printf("ERROR: %s\n", err.Error())
-		} else {
-			return r
-		}
-	}
-	return false
-}
-
-type StoreArgs struct {
-	Key   Key
-	Value []byte
-}
-
-func SendStore(from *Contact, c *Contact, key Key, value []byte, postman *Postman) {
-	//log.Printf("--> %s:%d STORE Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
-	args := StoreArgs{
-		Key:   key,
-		Value: value,
-	}
-	argsB, err := json.Marshal(&args)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return
-	}
-	_, err = SendMessage(from, c, STORE, argsB, false, postman)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-	}
-}
-
-func SendFindNode(from *Contact, c *Contact, key *Key, postman *Postman) []Contact {
-	//log.Printf("--> %s:%d FIND_NODE\n", c.Ip.String(), c.Port)
-	argsB, err := json.Marshal(key)
-	if err != nil {
-		log.Println("ERROR:", err.Error())
-		return []Contact{}
-	}
-	resp, err := SendMessage(from, c, FIND_NODE, argsB, true, postman)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-	} else if resp == nil {
-		return []Contact{}
-	} else if resp.Err != nil {
-		log.Println("ERROR:", resp.Err.Error())
-	} else {
-		var r []Contact
-		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-		} else {
-			return r
-		}
-	}
-	return []Contact{}
-}
-
-func SendFindValue(from *Contact, c *Contact, key *Key, postman *Postman) *FindValueResponse {
-	//log.Printf("--> %s:%d FIND_VALUE Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString((*key)[:]))
-	argsB, err := json.Marshal(key)
-	if err != nil {
-		log.Println("ERROR:", err.Error())
-		return nil
-	}
-	resp, err := SendMessage(from, c, FIND_VALUE, argsB, true, postman)
-	if err != nil {
-		log.Println("ERROR:", err.Error())
-	} else if resp == nil {
-		return nil
-	} else if resp.Err != nil {
-		log.Println("ERROR:", resp.Err.Error())
-	} else {
-		var r FindValueResponse
-		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-		} else {
-			return &r
+func (rpc *RPCServer) FindValue(args *FindValueArgs, reply *FindValueResponse) error {
+	server.Buckets.Update(&args.Contact)
+	if err := server.Storage.Get(hex.EncodeToString(args.Key[:]), &reply.Value); err == skv.ErrNotFound {
+		kNears := server.Buckets.KNears(&args.Key)
+		for _, c := range kNears {
+			reply.KNears = append(reply.KNears, *c)
 		}
 	}
 	return nil
 }
 
-func SendStoreNetwork(c *Contact, key *Key, value []byte, postman *Postman) {
-	log.Printf("--> %s:%d STORE_NETWORK Key: %s Value: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]), hex.EncodeToString(value))
-	args := StoreArgs{
-		Key:   *key,
-		Value: value,
-	}
-	argsB, err := json.Marshal(&args)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-		return
-	}
-	_, err = SendMessage(nil, c, STORE_NETWORK, argsB, false, postman)
-	if err != nil {
-		log.Printf("ERROR: %s\n", err.Error())
-	}
-}
-
-func SendFindValueNetwork(c *Contact, key *Key, postman *Postman) []byte {
-	log.Printf("--> %s:%d FIND_VALUE_NETWORK Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]))
-	args, err := json.Marshal(key)
-	if err != nil {
-		log.Println("ERROR:", err.Error())
-		return []byte{}
-	}
-	resp, err := SendMessage(nil, c, FIND_VALUE_NETWORK, args, true, postman)
-	if err != nil {
-		log.Println("ERROR:", err.Error())
-	} else if resp == nil {
-		return nil
-	} else if resp.Err != nil {
-		log.Println("ERROR:", resp.Err.Error())
-	} else {
-		var r []byte
-		err := json.Unmarshal(resp.Bytes[:resp.NBytes], &r)
-		if err != nil {
-			log.Println("ERROR:", err.Error())
-		} else {
-			return r
+func (rpc *RPCServer) FindValueNetwork(args *FindValueArgs, reply *FindValueResponse) error {
+	log.Printf("FIND_VALUE_NETWORK Key %s\n", hex.EncodeToString(args.Key[:]))
+	nodes := server.LookUp(&args.Key)
+	for _, node := range nodes {
+		resp := SendFindValue(&server.Contact, node, &args.Key)
+		if len(resp.Value) != 0 && len(resp.KNears) == 0 {
+			*reply = resp
+			break
 		}
 	}
-	return []byte{}
+	return nil
+}
+
+func SendPing(from *Contact, to *Contact) bool {
+	args := PingArgs{Contact: *from}
+	reply := false
+	client, err := clientsManager.GetClient(to)
+	if err == nil {
+		err = client.Call("RPCServer.Ping", &args, &reply)
+		if err != nil {
+			reply = false
+		}
+	}
+	return reply
+}
+
+func SendPingFromClient(to *Contact) bool {
+	args := PingFromClientArgs{}
+	reply := false
+	client, err := clientsManager.GetClient(to)
+	if err == nil {
+		err = client.Call("RPCServer.Ping", &args, &reply)
+		if err != nil {
+			reply = false
+		}
+	}
+	return reply
+}
+
+func SendStore(from *Contact, c *Contact, key Key, value []byte) bool {
+	args := &StoreArgs{
+		Contact: *from,
+		Key:     key,
+		Value:   value,
+	}
+	reply := false
+	client, err := clientsManager.GetClient(c)
+	if err == nil {
+		err = client.Call("RPCServer.Store", &args, &reply)
+		if err != nil {
+			reply = false
+		}
+	}
+	return reply
+}
+
+func SendFindNode(from *Contact, c *Contact, key *Key) []Contact {
+	args := &FindNodeArgs{
+		Contact: *from,
+		Key:     *key,
+	}
+	var reply []Contact
+	client, err := clientsManager.GetClient(c)
+	if err == nil {
+		client.Call("RPCServer.FindNode", &args, &reply)
+	}
+	return reply
+}
+
+func SendFindValue(from *Contact, c *Contact, key *Key) FindValueResponse {
+	args := FindValueArgs{
+		Contact: *from,
+		Key:     *key,
+	}
+	var reply FindValueResponse
+	client, err := clientsManager.GetClient(c)
+	if err == nil {
+		client.Call("RPCServer.FindValue", &args, &reply)
+	}
+	return reply
+}
+
+func SendStoreNetwork(c *Contact, key *Key, value []byte) bool {
+	log.Printf("--> %s:%d STORE_NETWORK Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]))
+	args := &StoreArgs{
+		Contact: Contact{},
+		Key:     *key,
+		Value:   value,
+	}
+	var reply bool
+	client, err := clientsManager.GetClient(c)
+	if err == nil {
+		if err = client.Call("RPCServer.StoreNetwork", &args, &reply); err != nil {
+			return false
+		}
+	}
+	return reply
+}
+
+func SendFindValueNetwork(c *Contact, key *Key) []byte {
+	log.Printf("--> %s:%d FIND_VALUE_NETWORK Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]))
+	args := &FindValueArgs{
+		Contact: Contact{},
+		Key:     *key,
+	}
+	var reply FindValueResponse
+	client, err := clientsManager.GetClient(c)
+	if err == nil {
+		if err = client.Call("RPCServer.FindValueNetwork", &args, &reply); err != nil {
+			return []byte{}
+		}
+	}
+	return reply.Value
 }
 
 type LookUpContact struct {
 	Contact *Contact
 	Visit   bool
+}
+
+func InsertLC(set *[]*LookUpContact, c *LookUpContact) {
+	for i := 0; i < len(*set); i++ {
+		if (*set)[i].Contact.Id.Compare(&c.Contact.Id) == 0 {
+			return
+		}
+	}
+	*set = append(*set, c)
 }
 
 func (server Server) LookUp(key *Key) []*Contact {
@@ -334,7 +304,7 @@ func (server Server) LookUp(key *Key) []*Contact {
 		for i := 0; tmp != 0 && i < len(result); i++ {
 			if !result[i].Visit {
 				go func(t, k int) {
-					channels[t-1] <- SendFindNode(&server.Contact, result[k].Contact, key, server.Postman)
+					channels[t-1] <- SendFindNode(&server.Contact, result[k].Contact, key)
 				}(tmp, i)
 				tmp -= 1
 				result[i].Visit = true
@@ -350,25 +320,25 @@ func (server Server) LookUp(key *Key) []*Contact {
 		for tmp != 3 {
 			select {
 			case c := <-channels[0]:
-				for _, v := range c {
-					result = append(result, &LookUpContact{
-						Contact: &v,
+				for j := 0; j < len(c); j++ {
+					InsertLC(&result, &LookUpContact{
+						Contact: &c[j],
 						Visit:   false,
 					})
 				}
 				tmp += 1
 			case c := <-channels[1]:
-				for _, v := range c {
-					result = append(result, &LookUpContact{
-						Contact: &v,
+				for j := 0; j < len(c); j++ {
+					InsertLC(&result, &LookUpContact{
+						Contact: &c[j],
 						Visit:   false,
 					})
 				}
 				tmp += 1
 			case c := <-channels[2]:
-				for _, v := range c {
-					result = append(result, &LookUpContact{
-						Contact: &v,
+				for j := 0; j < len(c); j++ {
+					InsertLC(&result, &LookUpContact{
+						Contact: &c[j],
 						Visit:   false,
 					})
 				}
