@@ -93,6 +93,32 @@ func dbs(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+func cleanNodes() {
+	coll := db.Collection("nodes")
+	lastSee := time.Now()
+	cur, err := coll.Find(context.TODO(), bson.D{})
+	for {
+		diff := time.Now().Sub(lastSee)
+		if diff < 3*time.Second {
+			time.Sleep(3*time.Second - diff)
+		}
+		if cur == nil || !cur.Next(context.TODO()) {
+			cur, err = coll.Find(context.TODO(), bson.D{})
+		} else if err == nil && cur != nil {
+			current := kademlia.Contact{}
+			err = cur.Decode(&current)
+			if err == nil && !kademlia.SendPingFromClient(&current) {
+				var id = new(interface{})
+				err = cur.Current.Lookup("_id").Unmarshal(id)
+				if err == nil {
+					coll.DeleteOne(context.TODO(), bson.D{{"_id", id}})
+				}
+			}
+		}
+		lastSee = time.Now()
+	}
+}
+
 func nodes(w http.ResponseWriter, req *http.Request) {
 	w.Header().Add("Content-Type", api.ContentTypeJSON)
 	switch req.Method {
@@ -163,6 +189,7 @@ func main() {
 
 	http.HandleFunc("/dbs", dbs)
 	http.HandleFunc("/nodes", nodes)
+	go cleanNodes()
 	if err := http.ListenAndServe(fmt.Sprintf("%s:%d", *ip, *port), nil); err != nil {
 		log.Fatal(err)
 	}
