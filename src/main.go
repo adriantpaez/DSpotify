@@ -3,13 +3,30 @@ package main
 import (
 	http_server "DSpotify/src/http-server"
 	"DSpotify/src/kademlia"
+	"bytes"
 	"crypto/sha1"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/skycoin/skycoin/src/api"
+	"log"
 	"net"
+	"net/http"
 	"os"
 )
+
+func registerNode(server *kademlia.Contact, ip *string, port *int) bool {
+	data, err := json.Marshal(server)
+	if err != nil {
+		return false
+	} else {
+		_, err := http.Post(fmt.Sprintf("http://%s:%d/nodes", *ip, *port), api.ContentTypeJSON, bytes.NewBuffer(data))
+		if err != nil {
+			return false
+		}
+	}
+	return true
+}
 
 func main() {
 	var idSeed = flag.String("idSeed", "", "[REQUIRED] Seed for NodeID. NodeID=sha1(idSeed).")
@@ -18,6 +35,8 @@ func main() {
 	var knownFile = flag.String("known", "", "File with known contact for join to network.")
 	var inPort = flag.Int("inPort", 8000, "Input port for listen all RPC requests.")
 	var httpPort = flag.Int("httpPort", 8080, "Port for listen requests to web API.")
+	var trackerIp = flag.String("trackerIp", "127.0.0.1", "The IP of the tracker")
+	var trackerPort = flag.Int("trackerPort", 7000, "The Port of the tracker")
 	flag.Parse()
 
 	ip := net.ParseIP(*ipArg)
@@ -63,5 +82,10 @@ func main() {
 		Port:   *httpPort,
 	}
 	go httpServer.Start()
+	if registerNode(&server.Contact, trackerIp, trackerPort) {
+		log.Println("Register done")
+	} else {
+		log.Println("Register fail")
+	}
 	server.Start(knownContact)
 }
