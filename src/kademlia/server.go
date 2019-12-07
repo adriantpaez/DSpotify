@@ -1,9 +1,12 @@
 package kademlia
 
 import (
+	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/rapidloop/skv"
+	"github.com/skycoin/skycoin/src/api"
 	"log"
 	"net"
 	"net/http"
@@ -81,11 +84,26 @@ func (server *Server) joinToNetwork(known *Contact) {
 	server.LookUp(&server.Contact.Id)
 }
 
-func (server *Server) Start(known *Contact) {
+func (server *Server) Start(known *Contact, trackerIp *net.IP, trackerPort int) {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d \n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort)
 	InitClientsManager()
 	server.Clients = &clientsManager
 	go server.joinToNetwork(known)
+	go registerNode(&server.Contact, trackerIp, trackerPort)
 	server.startRPC()
 
+}
+
+func registerNode(server *Contact, ip *net.IP, port int) bool {
+	time.Sleep(5 * time.Second)
+	data, err := json.Marshal(server)
+	if err != nil {
+		return false
+	} else {
+		_, err := http.Post(fmt.Sprintf("http://%s:%d/nodes", ip.String(), port), api.ContentTypeJSON, bytes.NewBuffer(data))
+		if err != nil {
+			return false
+		}
+	}
+	return true
 }

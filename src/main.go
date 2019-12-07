@@ -3,30 +3,13 @@ package main
 import (
 	http_server "DSpotify/src/http-server"
 	"DSpotify/src/kademlia"
-	"bytes"
 	"crypto/sha1"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/skycoin/skycoin/src/api"
-	"log"
 	"net"
-	"net/http"
 	"os"
 )
-
-func registerNode(server *kademlia.Contact, ip *string, port *int) bool {
-	data, err := json.Marshal(server)
-	if err != nil {
-		return false
-	} else {
-		_, err := http.Post(fmt.Sprintf("http://%s:%d/nodes", *ip, *port), api.ContentTypeJSON, bytes.NewBuffer(data))
-		if err != nil {
-			return false
-		}
-	}
-	return true
-}
 
 func main() {
 	var idSeed = flag.String("idSeed", "", "[REQUIRED] Seed for NodeID. NodeID=sha1(idSeed).")
@@ -82,10 +65,5 @@ func main() {
 		Port:   *httpPort,
 	}
 	go httpServer.Start()
-	if registerNode(&server.Contact, trackerIp, trackerPort) {
-		log.Println("Register done")
-	} else {
-		log.Println("Register fail")
-	}
 	server.Start(knownContact)
 }
