@@ -14,7 +14,6 @@ type HttpServer struct {
 	Port     int
 	Database *mongo.Database
 	Kademlia *kademlia.Contact
-	Postman  *kademlia.Postman
 }
 
 var server *HttpServer

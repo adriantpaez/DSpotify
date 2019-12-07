@@ -19,13 +19,7 @@ func (block *Block) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (block Block) Save(metadata db.Song, i int) error {
-	var key kademlia.Key = sha1.Sum([]byte(fmt.Sprintf("%s-%s-%d", metadata.Title, metadata.ArtistId, i)))
-	kademlia.SendStoreNetwork(server.Kademlia, &key, block, server.Postman)
-	return nil
-}
-
-func UploadSong(metadata db.Song, filepath string) error {
+func UploadInit(metadata *db.SongArtistName, filepath string) error {
 	if filepath != "" {
 		file, err := os.Open(filepath)
 		if err != nil {
@@ -37,7 +31,7 @@ func UploadSong(metadata db.Song, filepath string) error {
 			}
 			if !stats.IsDir() {
 				if strings.Contains(file.Name(), ".mp3") {
-					uploadSong(file, metadata)
+					upload(file, metadata)
 				} else {
 					log.Fatal("FILE MUST BE MP3")
 				}
@@ -53,7 +47,7 @@ func UploadSong(metadata db.Song, filepath string) error {
 						if err != nil {
 							log.Fatal(err)
 						}
-						uploadSong(newFile, metadata)
+						upload(newFile, metadata)
 					}
 				}
 			}
@@ -62,7 +56,15 @@ func UploadSong(metadata db.Song, filepath string) error {
 	return nil
 }
 
-func uploadSong(file *os.File, metadata db.Song) {
+func (block Block) save(metadata *db.SongArtistName) error {
+	var key kademlia.Key = sha1.Sum([]byte(fmt.Sprintf("%s-%s-%d", metadata.Song.Title, metadata.Artist, metadata.Song.Blocks)))
+	if !kademlia.SendStoreNetwork(server.Kademlia, &key, block) {
+		return ServerError{ErrorMessage: "STORE FAILED"}
+	}
+	return nil
+}
+
+func upload(file *os.File, metadata *db.SongArtistName) {
 	decoder, err := mp3.NewDecoder(file)
 	if err != nil {
 		log.Fatal(err)
@@ -70,7 +72,6 @@ func uploadSong(file *os.File, metadata db.Song) {
 	buffer := make([]byte, 5000)
 	total := 3000000
 	var b *Block
-	i := 0
 	var encoder *lame.Encoder
 	for {
 		if n, err := decoder.Read(buffer); n > 0 {
@@ -79,11 +80,11 @@ func uploadSong(file *os.File, metadata db.Song) {
 			}
 			if total >= 3000000 {
 				if b != nil {
-					err = b.Save(metadata, i)
+					err = b.save(metadata)
+					metadata.Song.Blocks++
 					if err != nil {
 						log.Fatal(err)
 					}
-					i++
 				}
 				if encoder != nil {
 					encoder.Close()

@@ -86,6 +86,12 @@ func (server *Server) Start(known *Contact) {
 	InitClientsManager()
 	server.Clients = &clientsManager
 	go server.joinToNetwork(known)
-	server.startRPC()
+
+	go server.startRPC()
+	fmt.Println(SendPing(&server.Contact, &Contact{
+		Ip:   []byte{127, 0, 0, 1},
+		Port: 8000,
+		Id:   Key{},
+	}))
 
 }

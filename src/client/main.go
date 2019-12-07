@@ -41,7 +41,7 @@ func main() {
 	if errD != nil {
 		log.Println(errD.Error())
 	}
-	knownContact, postman, errK := establishKademliaConnection(ip, kademliaOutPort, knownFile)
+	knownContact, errK := establishKademliaConnection(ip, kademliaOutPort, knownFile)
 	if errK != nil {
 		log.Println(errK.Error())
 	}
@@ -53,47 +53,48 @@ func main() {
 		Port:     *httpPort,
 		Database: database,
 		Kademlia: knownContact,
-		Postman:  postman,
 	}
 	httpServer.Start()
 }
 
 func establishDatabaseConnection(DatabaseIp *string, DatabasePort *int) (*mongo.Database, error) {
 	clientOptions := options.Client().ApplyURI(strings.Join([]string{"mongodb://", net.JoinHostPort(*DatabaseIp, strconv.Itoa(*DatabasePort))}, ""))
-	client, err := mongo.Connect(context.TODO(), clientOptions)
+	client, _ := mongo.Connect(context.TODO(), clientOptions)
+	err := client.Ping(context.TODO(), nil)
 	if err != nil {
+		log.Println("error")
 		return nil, httpserver.ServerError{"HTTP-SERVER COULD NOT CONNECT TO DATABASE SERVER"}
 	}
+	log.Println("No error")
 	return client.Database("dspotify"), nil
 }
 
-func establishKademliaConnection(clientIp net.IP, kademliaOutPort *int, knownFile *string) (*kademlia.Contact, *kademlia.Postman, error) {
+func establishKademliaConnection(clientIp net.IP, kademliaOutPort *int, knownFile *string) (*kademlia.Contact, error) {
 	var knownContact *kademlia.Contact
 	if *knownFile != "" {
 		file, err := os.Open(*knownFile)
 		if err != nil {
-			return nil, nil, httpserver.ServerError{ErrorMessage: err.Error()}
+			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
 		}
 		info, err := file.Stat()
 		if err != nil {
-			return nil, nil, httpserver.ServerError{ErrorMessage: err.Error()}
+			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
 		}
 		data := make([]byte, info.Size())
 		_, err = file.Read(data)
 		if err != nil {
-			return nil, nil, httpserver.ServerError{ErrorMessage: err.Error()}
+			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
 		}
 		c := kademlia.Contact{}
 		err = json.Unmarshal(data, &c)
 		if err != nil {
-			return nil, nil, httpserver.ServerError{ErrorMessage: err.Error()}
+			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
 		}
 		knownContact = &c
 	}
-	postman := kademlia.NewPostman(100, clientIp, *kademliaOutPort)
-	go postman.Start()
-	if !kademlia.SendPing(nil, knownContact, postman) {
-		return knownContact, postman, httpserver.ServerError{ErrorMessage: "HTTP SERVER COULD NOT CONNECT TO KADEMLIA NODE"}
+	kademlia.InitClientsManager()
+	if !kademlia.SendPingFromClient(knownContact) {
+		return knownContact, httpserver.ServerError{ErrorMessage: "HTTP SERVER COULD NOT CONNECT TO KADEMLIA NODE"}
 	}
-	return knownContact, postman, nil
+	return knownContact, nil
 }

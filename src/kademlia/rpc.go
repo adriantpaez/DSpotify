@@ -189,7 +189,7 @@ func SendPingFromClient(to *Contact) bool {
 	reply := false
 	client, err := clientsManager.GetClient(to)
 	if err == nil {
-		err = client.Call("RPCServer.Ping", &args, &reply)
+		err = client.Call("RPCServer.PingFromClient", &args, &reply)
 		if err != nil {
 			reply = false
 		}
