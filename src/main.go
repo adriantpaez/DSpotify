@@ -65,5 +65,6 @@ func main() {
 		Port:   *httpPort,
 	}
 	go httpServer.Start()
-	server.Start(knownContact)
+	tip := net.ParseIP(*trackerIp)
+	server.Start(knownContact, &tip, *trackerPort)
 }
