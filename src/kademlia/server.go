@@ -83,13 +83,13 @@ func (server *Server) joinToNetwork(known *Contact) {
 	server.LookUp(&server.Contact.Id)
 }
 
-func (server *Server) Start(known *Contact, trackerIp *net.IP, trackerPort int) {
+func (server *Server) Start(trackerIp *net.IP, trackerPort int) {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d \n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort)
 	nodes := getNodes(trackerIp, trackerPort)
 	if len(nodes) == 0 {
 		log.Println("WARNING: Not nodes for join to network.")
 	} else {
-		known = &nodes[rand.Intn(len(nodes))]
+		known := &nodes[rand.Intn(len(nodes))]
 		go server.joinToNetwork(known)
 	}
 	go registerNode(&server.Contact, trackerIp, trackerPort)
