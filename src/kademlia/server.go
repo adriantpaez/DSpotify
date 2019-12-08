@@ -85,7 +85,6 @@ func (server *Server) joinToNetwork(known *Contact) {
 
 func (server *Server) Start(known *Contact, trackerIp *net.IP, trackerPort int) {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d \n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort)
-	InitClientsManager()
 	server.Clients = &clientsManager
 	go server.joinToNetwork(known)
 	go registerNode(&server.Contact, trackerIp, trackerPort)

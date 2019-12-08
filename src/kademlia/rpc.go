@@ -174,8 +174,9 @@ func (rpc *RPCServer) FindValueNetwork(args *FindValueArgs, reply *FindValueResp
 func SendPing(from *Contact, to *Contact) bool {
 	args := PingArgs{Contact: *from}
 	reply := false
-	client, err := clientsManager.GetClient(to)
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", to.Ip.String(), to.Port))
 	if err == nil {
+		defer client.Close()
 		err = client.Call("RPCServer.Ping", &args, &reply)
 		if err != nil {
 			reply = false
@@ -205,8 +206,9 @@ func SendStore(from *Contact, c *Contact, key Key, value []byte) bool {
 		Value:   value,
 	}
 	reply := false
-	client, err := clientsManager.GetClient(c)
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", c.Ip.String(), c.Port))
 	if err == nil {
+		defer client.Close()
 		err = client.Call("RPCServer.Store", &args, &reply)
 		if err != nil {
 			reply = false
@@ -221,8 +223,9 @@ func SendFindNode(from *Contact, c *Contact, key *Key) []Contact {
 		Key:     *key,
 	}
 	var reply []Contact
-	client, err := clientsManager.GetClient(c)
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", c.Ip.String(), c.Port))
 	if err == nil {
+		defer client.Close()
 		client.Call("RPCServer.FindNode", &args, &reply)
 	}
 	return reply
@@ -234,8 +237,9 @@ func SendFindValue(from *Contact, c *Contact, key *Key) FindValueResponse {
 		Key:     *key,
 	}
 	var reply FindValueResponse
-	client, err := clientsManager.GetClient(c)
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", c.Ip.String(), c.Port))
 	if err == nil {
+		defer client.Close()
 		client.Call("RPCServer.FindValue", &args, &reply)
 	}
 	return reply
@@ -249,8 +253,9 @@ func SendStoreNetwork(c *Contact, key *Key, value []byte) bool {
 		Value:   value,
 	}
 	var reply bool
-	client, err := clientsManager.GetClient(c)
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", c.Ip.String(), c.Port))
 	if err == nil {
+		defer client.Close()
 		if err = client.Call("RPCServer.StoreNetwork", &args, &reply); err != nil {
 			return false
 		}
@@ -265,8 +270,9 @@ func SendFindValueNetwork(c *Contact, key *Key) []byte {
 		Key:     *key,
 	}
 	var reply FindValueResponse
-	client, err := clientsManager.GetClient(c)
+	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", c.Ip.String(), c.Port))
 	if err == nil {
+		defer client.Close()
 		if err = client.Call("RPCServer.FindValueNetwork", &args, &reply); err != nil {
 			return []byte{}
 		}
