@@ -191,7 +191,7 @@ func SendPingFromClient(to *Contact) bool {
 	client, err := rpc.DialHTTP("tcp", fmt.Sprintf("%s:%d", to.Ip.String(), to.Port))
 	if err == nil {
 		defer client.Close()
-		err = client.Call("RPCServer.Ping", &args, &reply)
+		err = client.Call("RPCServer.PingFromClient", &args, &reply)
 		if err != nil {
 			reply = false
 		}
