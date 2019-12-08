@@ -245,7 +245,7 @@ func SendFindValue(from *Contact, c *Contact, key *Key) FindValueResponse {
 	return reply
 }
 
-func SendStoreNetwork(c *Contact, key *Key, value []byte) bool {
+func SendStoreNetwork(c *Contact, key *Key, value []byte) error {
 	log.Printf("--> %s:%d STORE_NETWORK Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]))
 	args := &StoreArgs{
 		Contact: Contact{},
@@ -257,13 +257,13 @@ func SendStoreNetwork(c *Contact, key *Key, value []byte) bool {
 	if err == nil {
 		defer client.Close()
 		if err = client.Call("RPCServer.StoreNetwork", &args, &reply); err != nil {
-			return false
+			return nil
 		}
 	}
-	return reply
+	return err
 }
 
-func SendFindValueNetwork(c *Contact, key *Key) []byte {
+func SendFindValueNetwork(c *Contact, key *Key) ([]byte, error) {
 	log.Printf("--> %s:%d FIND_VALUE_NETWORK Key: %s\n", c.Ip.String(), c.Port, hex.EncodeToString(key[:]))
 	args := &FindValueArgs{
 		Contact: Contact{},
@@ -274,10 +274,10 @@ func SendFindValueNetwork(c *Contact, key *Key) []byte {
 	if err == nil {
 		defer client.Close()
 		if err = client.Call("RPCServer.FindValueNetwork", &args, &reply); err != nil {
-			return []byte{}
+			return []byte{}, err
 		}
 	}
-	return reply.Value
+	return reply.Value, err
 }
 
 type LookUpContact struct {
