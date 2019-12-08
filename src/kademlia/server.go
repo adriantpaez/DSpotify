@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/rapidloop/skv"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -77,14 +78,20 @@ func (server *Server) joinToNetwork(known *Contact) {
 		fmt.Println("WARNING: Not known contact")
 		return
 	}
-	fmt.Printf("INFO: Joining to network with known contact: %s\n", fmt.Sprint(*known))
+	fmt.Printf("INFO: Joining to network with known contact: %s\n", fmt.Sprint(known))
 	server.Buckets.Update(known)
 	server.LookUp(&server.Contact.Id)
 }
 
 func (server *Server) Start(known *Contact, trackerIp *net.IP, trackerPort int) {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d \n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort)
-	go server.joinToNetwork(known)
+	nodes := getNodes(trackerIp, trackerPort)
+	if len(nodes) == 0 {
+		log.Println("WARNING: Not nodes for join to network.")
+	} else {
+		known = &nodes[rand.Intn(len(nodes))]
+		go server.joinToNetwork(known)
+	}
 	go registerNode(&server.Contact, trackerIp, trackerPort)
 	server.startRPC()
 
@@ -123,5 +130,6 @@ func registerNode(server *Contact, ip *net.IP, port int) bool {
 			return false
 		}
 	}
+	log.Println("Register Done")
 	return true
 }
