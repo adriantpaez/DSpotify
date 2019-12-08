@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/rapidloop/skv"
 	"log"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/rpc"
@@ -37,7 +38,6 @@ type Server struct {
 	Buckets BucketsTable
 	InPort  int
 	Storage *skv.KVStore
-	Clients *ClientsManager
 }
 
 func NewServer(key Key, ip net.IP, inPort int, database string) *Server {
@@ -78,19 +78,45 @@ func (server *Server) joinToNetwork(known *Contact) {
 		fmt.Println("WARNING: Not known contact")
 		return
 	}
-	fmt.Printf("INFO: Joining to network with known contact: %s\n", fmt.Sprint(*known))
+	fmt.Printf("INFO: Joining to network with known contact: %s\n", fmt.Sprint(known))
 	server.Buckets.Update(known)
 	server.LookUp(&server.Contact.Id)
 }
 
-func (server *Server) Start(known *Contact, trackerIp *net.IP, trackerPort int) {
+func (server *Server) Start(trackerIp *net.IP, trackerPort int) {
 	log.Printf("Starting DSpotify server\nID: %s\nIP: %s InPort: %d \n", hex.EncodeToString(server.Contact.Id[:]), server.Contact.Ip.String(), server.InPort)
-	InitClientsManager()
-	server.Clients = &clientsManager
-	go server.joinToNetwork(known)
+	nodes := getNodes(trackerIp, trackerPort)
+	if len(nodes) == 0 {
+		log.Println("WARNING: Not nodes for join to network.")
+	} else {
+		known := &nodes[rand.Intn(len(nodes))]
+		go server.joinToNetwork(known)
+	}
 	go registerNode(&server.Contact, trackerIp, trackerPort)
 	server.startRPC()
 
+}
+
+func getNodes(ip *net.IP, port int) []Contact {
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/nodes", ip.String(), port))
+	if err != nil {
+		return []Contact{}
+	}
+	data := []byte{}
+	buffer := make([]byte, 100)
+	for {
+		if n, _ := resp.Body.Read(buffer); n > 0 {
+			data = append(data, buffer[:n]...)
+		} else {
+			break
+		}
+	}
+	nodes := []Contact{}
+	err = json.Unmarshal(data, &nodes)
+	if err == nil {
+		return nodes
+	}
+	return []Contact{}
 }
 
 func registerNode(server *Contact, ip *net.IP, port int) bool {
@@ -104,5 +130,6 @@ func registerNode(server *Contact, ip *net.IP, port int) bool {
 			return false
 		}
 	}
+	log.Println("Register Done")
 	return true
 }
