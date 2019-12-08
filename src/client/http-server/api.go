@@ -2,12 +2,14 @@ package httpserver
 
 import (
 	"DSpotify/src/client/db"
+	"context"
 	"encoding/json"
+	"fmt"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
 	"net/http"
-	"strconv"
 )
 
 type EndPoint struct {
@@ -15,12 +17,14 @@ type EndPoint struct {
 	Function func(http.ResponseWriter, *http.Request)
 }
 
-var database *mongo.Database
-
 var endpoints = []EndPoint{
 	{
 		Path:     "/findByArtist",
 		Function: FindSongByArtistHandler,
+	},
+	{
+		Path:     "/play",
+		Function: PlaySongHandler,
 	},
 	{
 		Path:     "/listArtists",
@@ -36,21 +40,70 @@ var endpoints = []EndPoint{
 	},
 }
 
+func PlaySongHandler(w http.ResponseWriter, req *http.Request) {
+	title := getParameterFromQuery(req, "song")
+	artist := getParameterFromQuery(req, "artist")
+	coll := server.Database.Collection("song")
+	hexId, _ := primitive.ObjectIDFromHex(artist)
+	result := coll.FindOne(context.TODO(), bson.D{{"title", title}, {"artist", hexId}})
+	var song db.Song
+	err := result.Decode(&song)
+	if err != nil {
+		sendResponse(nil, err, &w)
+		return
+	}
+	var art db.Artist
+	coll = server.Database.Collection("artist")
+	result = coll.FindOne(context.TODO(), bson.D{{"_id", hexId}})
+	err = result.Decode(&art)
+	if err != nil {
+		sendResponse(nil, err, &w)
+		return
+	}
+	StreamInit(db.SongArtistName{
+		Artist: art.Name,
+		Song:   song,
+	})
+}
+
 func StoreArtistHandler(w http.ResponseWriter, req *http.Request) {
 	artist := getParameterFromQuery(req, "artist")
-	result, err := db.StoreArtist(database, db.Artist{Name: artist})
+	result, err := db.StoreArtist(server.Database, db.Artist{Name: artist})
 	sendResponse(result, err, &w)
 }
 
 func StoreSongHandler(w http.ResponseWriter, req *http.Request) {
 	title := getParameterFromQuery(req, "song")
-	artist := getParameterFromQuery(req, "artist")
-	blocks := getParameterFromQuery(req, "blocks")
-	hexId, _ := primitive.ObjectIDFromHex(artist)
-	intBlocks, _ := strconv.Atoi(blocks)
-	result, err := db.StoreSong(database, db.Song{Title: title, KademliaBlocks: intBlocks, ArtistId: hexId})
+	filepath := getParameterFromQuery(req, "file")
+	artistId := getParameterFromQuery(req, "artist")
+	hexId, _ := primitive.ObjectIDFromHex(artistId)
+	coll := server.Database.Collection("artist")
+	var artist db.Artist
+	artistResult := coll.FindOne(context.TODO(), bson.D{{"_id", hexId}})
+	err := artistResult.Decode(&artist)
+	if err != nil {
+		log.Fatal("Not artist found")
+	} else {
+		fmt.Println(artist.Name)
+	}
+	song := db.SongArtistName{
+		Artist: artist.Name,
+		Song: db.Song{
+			Artist: hexId,
+			Title:  title,
+			Blocks: 0,
+		},
+	}
+	err = UploadInit(&song, filepath)
+	var result *mongo.InsertOneResult
+	if err == nil {
+		log.Println("No error in Kademlia")
+		result, err = db.StoreSong(server.Database, song.Song)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
 	sendResponse(result, err, &w)
-
 }
 
 func sendResponse(result interface{}, err error, w *http.ResponseWriter) {
@@ -65,14 +118,14 @@ func sendResponse(result interface{}, err error, w *http.ResponseWriter) {
 }
 
 func ListArtistsHandler(w http.ResponseWriter, req *http.Request) {
-	result, err := db.ListArtists(database)
+	result, err := db.ListArtists(server.Database)
 	sendResponse(result, err, &w)
 }
 
 func FindSongByArtistHandler(w http.ResponseWriter, req *http.Request) {
-	artistId := getParameterFromQuery(req, "artistId")
+	artistId := getParameterFromQuery(req, "artist")
 	hexId, _ := primitive.ObjectIDFromHex(artistId)
-	result, err := db.FindSongByArtist(database, hexId)
+	result, err := db.FindSongByArtist(server.Database, hexId)
 	sendResponse(result, err, &w)
 }
 

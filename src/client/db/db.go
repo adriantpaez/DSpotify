@@ -13,28 +13,33 @@ type Artist struct {
 }
 
 type Song struct {
-	ArtistId       interface{}
-	Title          string
-	KademliaBlocks int
+	Artist interface{}
+	Title  string
+	Blocks int
+}
+
+type SongArtistName struct {
+	Artist string
+	Song   Song
 }
 
 func StoreArtist(client *mongo.Database, artist Artist) (*mongo.InsertOneResult, error) {
 	collection := getCollection(client, "artist")
-	return collection.InsertOne(context.Background(), bson.D{{"name", artist.Name}})
+	return collection.InsertOne(context.Background(), artist)
 }
 
-func FindSongByArtist(client *mongo.Database, ArtistId interface{}) (*[]bson.D, error) {
+func FindSongByArtist(client *mongo.Database, ArtistId interface{}) ([]Song, error) {
 	collection := getCollection(client, "song")
-	cursor, err := collection.Find(context.Background(), bson.D{{"artist", ArtistId}})
+	cursor, err := collection.Find(context.Background(), bson.D{{"artistId", ArtistId}})
 	if err != nil {
 		return nil, err
 	}
-	var result []bson.D
+	var result []Song
 	err = cursor.All(context.Background(), &result)
 	if err != nil {
 		return nil, err
 	}
-	return &result, nil
+	return result, nil
 }
 
 func listCollection(client *mongo.Database, name string) ([]string, error) {
@@ -63,7 +68,7 @@ func ListArtists(client *mongo.Database) ([]string, error) {
 
 func StoreSong(client *mongo.Database, song Song) (*mongo.InsertOneResult, error) {
 	collection := getCollection(client, "song")
-	return collection.InsertOne(context.Background(), bson.D{{"artist", song.ArtistId}, {"title", song.Title}, {"blocks", song.KademliaBlocks}})
+	return collection.InsertOne(context.Background(), song)
 }
 
 func getCollection(client *mongo.Database, coll string) *mongo.Collection {
