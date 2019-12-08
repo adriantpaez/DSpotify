@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>DSpotify</title>
+</head>
+<body>
+
+<div id="app">
+	<h1>Welcome to DSpotify</h1>
+	<button v-on:click="upSong = true; initialState = false" v-if="!upSong && initialState">Upload Song</button>
+	<button v-on:click="upArtist = true; initialState = false" v-if="!upArtist && initialState">Upload Artist</button>
+
+	<!UPLOAD SONG>
+	<div id="uploadSong" v-if="upSong">
+		<label>Title: </label>
+		<input type="text" v-model="currentSongTitle"/>
+		<label>Artist: </label>
+		<input type="text" v-model="currentSongArtist"/>
+		<button v-on:click="uploadSong()">OK</button>
+		<button v-on:click="cancelUploadSong()">Cancel</button>
+	</div>
+
+	<!UPLOAD ARTIST>
+	<div id="uploadArtist" v-if="upArtist">
+		<label>Name: </label>
+		<input type="text" v-model="currentArtist"/>
+		<button v-on:click="uploadArtist()">OK</button>
+		<button v-on:click="cancelUploadArtist()">Cancel</button>
+	</div>
+	<br>
+	<br>
+	<button v-on:click="loadArtists">Load Artists</button>
+
+	<!ARTISTS>
+	<div id="artistsList" v-if="showArtists">
+		<h2>Artists</h2>
+		<div v-for="artist in sortedArtists" v-bind:key="artist.id">
+			<h3 v-on:click="getSongs(artist)">{{artist.name}}</h3>
+		</div>
+	</div>
+
+	<!LIST AND PLAY/PAUSE SONGS>
+
+</div>
+
+<script src="js/vue.js"></script>
+<script src="js/seed.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
