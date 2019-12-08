@@ -92,6 +92,28 @@ func (server *Server) Start(known *Contact, trackerIp *net.IP, trackerPort int) 
 
 }
 
+func getNodes(ip *net.IP, port int) []Contact {
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/nodes", ip.String(), port))
+	if err != nil {
+		return []Contact{}
+	}
+	data := []byte{}
+	buffer := make([]byte, 100)
+	for {
+		if n, _ := resp.Body.Read(buffer); n > 0 {
+			data = append(data, buffer[:n]...)
+		} else {
+			break
+		}
+	}
+	nodes := []Contact{}
+	err = json.Unmarshal(data, &nodes)
+	if err == nil {
+		return nodes
+	}
+	return []Contact{}
+}
+
 func registerNode(server *Contact, ip *net.IP, port int) bool {
 	time.Sleep(5 * time.Second)
 	data, err := json.Marshal(server)
