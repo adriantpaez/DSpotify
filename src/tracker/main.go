@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/skycoin/skycoin/src/api"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -57,7 +56,7 @@ func parseBodyContact(req *http.Request) kademlia.Contact {
 }
 
 func dbs(w http.ResponseWriter, req *http.Request) {
-	w.Header().Add("Content-Type", api.ContentTypeJSON)
+	w.Header().Add("Content-Type", "application/json")
 	switch req.Method {
 	case http.MethodGet:
 		fmt.Println("GET /dbs")
@@ -120,7 +119,7 @@ func cleanNodes() {
 }
 
 func nodes(w http.ResponseWriter, req *http.Request) {
-	w.Header().Add("Content-Type", api.ContentTypeJSON)
+	w.Header().Add("Content-Type", "application/json")
 	switch req.Method {
 	case http.MethodGet:
 		fmt.Println("GET /nodes")

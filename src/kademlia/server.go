@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/rapidloop/skv"
-	"github.com/skycoin/skycoin/src/api"
 	"log"
 	"net"
 	"net/http"
@@ -100,7 +99,7 @@ func registerNode(server *Contact, ip *net.IP, port int) bool {
 	if err != nil {
 		return false
 	} else {
-		_, err := http.Post(fmt.Sprintf("http://%s:%d/nodes", ip.String(), port), api.ContentTypeJSON, bytes.NewBuffer(data))
+		_, err := http.Post(fmt.Sprintf("http://%s:%d/nodes", ip.String(), port), "application/json", bytes.NewBuffer(data))
 		if err != nil {
 			return false
 		}
