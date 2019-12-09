@@ -10,7 +10,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
-	"math/rand"
 	"net"
 	"net/http"
 )
@@ -81,29 +80,10 @@ func DownloadSongHandler(w http.ResponseWriter, req *http.Request) {
 		sendResponse(nil, err, &w)
 		return
 	}
-	for {
-		err = StreamInit(db.SongArtistName{
-			Artist: art.Name,
-			Song:   song,
-		})
-		if err == nil {
-			break
-		} else {
-			if err.Error() == CONNECTIONREFUSED {
-				nodes := GetNodes(server.Tracker, 7000)
-				if len(nodes) == 0 {
-					fmt.Println("NO NODES TO CONNECT")
-					break
-				} else {
-					known := &nodes[rand.Intn(len(nodes))]
-					server.Kademlia = known
-				}
-			} else {
-				break
-			}
-			fmt.Println(err.Error())
-		}
-	}
+	err = StreamInit(db.SongArtistName{
+		Artist: art.Name,
+		Song:   song,
+	})
 }
 
 func StoreArtistHandler(w http.ResponseWriter, req *http.Request) {
@@ -135,26 +115,7 @@ func StoreSongHandler(w http.ResponseWriter, req *http.Request) {
 		},
 	}
 	//cosa nueva
-	for {
-		err := UploadInit(&song, filepath)
-		if err == nil {
-			break
-		} else {
-			fmt.Println(err.Error())
-			if err.Error() == CONNECTIONREFUSED {
-				nodes := GetNodes(server.Tracker, 7000)
-				if len(nodes) == 0 {
-					fmt.Println("NO SERVER TO CONNECT")
-					break
-				} else {
-					known := &nodes[rand.Intn(len(nodes))]
-					server.Kademlia = known
-				}
-			} else {
-				break
-			}
-		}
-	}
+	err = UploadInit(&song, filepath)
 	var result *mongo.InsertOneResult
 	if err == nil {
 		result, err = db.StoreSong(server.Database, song.Song)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/hajimehoshi/go-mp3"
 	"github.com/viert/go-lame"
+	"math/rand"
 	"net"
 	"os"
 	"strings"
@@ -88,11 +89,26 @@ func checkErr(err error) string {
 
 func (block Block) save(metadata *db.SongArtistName) error {
 	var key kademlia.Key = sha1.Sum([]byte(fmt.Sprintf("%s-%s-%d", metadata.Song.Title, metadata.Artist, metadata.Song.Blocks)))
-	err := kademlia.SendStoreNetwork(server.Kademlia, &key, block)
-	if err != nil && strings.Contains(err.Error(), "connection refused") {
-		return ServerError{ErrorMessage: CONNECTIONREFUSED}
+	for {
+		err := kademlia.SendStoreNetwork(server.Kademlia, &key, block)
+		if err == nil {
+			break
+		} else {
+			if strings.Contains(err.Error(), "connection refused") {
+				nodes := GetNodes(server.Tracker, 7000)
+				if len(nodes) == 0 {
+					fmt.Println("NO SERVER TO CONNECT")
+					break
+				} else {
+					known := &nodes[rand.Intn(len(nodes))]
+					server.Kademlia = known
+				}
+			} else {
+				return err
+			}
+		}
 	}
-	return err
+	return nil
 }
 
 func upload(file *os.File, metadata *db.SongArtistName) error {

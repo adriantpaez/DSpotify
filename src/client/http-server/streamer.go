@@ -9,7 +9,8 @@ import (
 	"github.com/faiface/beep/mp3"
 	"github.com/faiface/beep/speaker"
 	"io"
-	"log"
+	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -40,12 +41,32 @@ func (rc *ReaderCloserBlock) Close() error {
 	return nil
 }
 
-func (ns *NetworkStalker) Stalk(metadata db.SongArtistName, errChan *chan error) {
+func (ns *NetworkStalker) Stalk(metadata db.SongArtistName) {
 	println(ns)
 	for i := 0; i < metadata.Song.Blocks; i++ {
 		var key kademlia.Key = sha1.Sum([]byte(fmt.Sprintf("%s-%s-%d", metadata.Song.Title, metadata.Artist, i)))
-		value, err := kademlia.SendFindValueNetwork(server.Kademlia, &key)
-		*errChan <- err
+		var value []byte
+		var err error
+		for {
+			value, err = kademlia.SendFindValueNetwork(server.Kademlia, &key)
+			if err == nil {
+				break
+			} else {
+				if strings.Contains(err.Error(), "connection refused") {
+					nodes := GetNodes(server.Tracker, 7000)
+					if len(nodes) == 0 {
+						fmt.Println("NO NODES TO CONNECT")
+						break
+					} else {
+						known := &nodes[rand.Intn(len(nodes))]
+						server.Kademlia = known
+					}
+				} else {
+					fmt.Println(err.Error())
+					break
+				}
+			}
+		}
 		if len(value) == 0 {
 			fmt.Println("VALUE NOT FOUND")
 		}
@@ -98,15 +119,11 @@ func StreamInit(metadata db.SongArtistName) error {
 		CurrentBlocks: make(chan *ReaderCloserBlock, 3),
 		Lock:          false,
 	}
-	var errChan chan error
-	go stalker.Stalk(metadata, &errChan)
-	if err := <-errChan; err != nil {
-		return err
-	}
+	go stalker.Stalk(metadata)
 	sr := beep.SampleRate(44100)
 	err := speaker.Init(sr, sr.N(time.Second/10))
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	var queue Queue
 	queue.DecodeAndFill()
