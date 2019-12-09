@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"DSpotify/src/client/db"
+	"DSpotify/src/kademlia"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"log"
+	"math/rand"
+	"net"
 	"net/http"
 )
 
@@ -23,8 +26,20 @@ var endpoints = []EndPoint{
 		Function: FindSongByArtistHandler,
 	},
 	{
+		Path:     "/download",
+		Function: DownloadSongHandler,
+	},
+	{
 		Path:     "/play",
 		Function: PlaySongHandler,
+	},
+	{
+		Path:     "/pause",
+		Function: PauseSongHandler,
+	},
+	{
+		Path:     "/playSong",
+		Function: DownloadSongHandler,
 	},
 	{
 		Path:     "/listArtists",
@@ -41,6 +56,12 @@ var endpoints = []EndPoint{
 }
 
 func PlaySongHandler(w http.ResponseWriter, req *http.Request) {
+	Play()
+}
+func PauseSongHandler(w http.ResponseWriter, req *http.Request) {
+	Pause()
+}
+func DownloadSongHandler(w http.ResponseWriter, req *http.Request) {
 	title := getParameterFromQuery(req, "song")
 	artist := getParameterFromQuery(req, "artist")
 	coll := server.Database.Collection("song")
@@ -60,10 +81,29 @@ func PlaySongHandler(w http.ResponseWriter, req *http.Request) {
 		sendResponse(nil, err, &w)
 		return
 	}
-	StreamInit(db.SongArtistName{
-		Artist: art.Name,
-		Song:   song,
-	})
+	for {
+		err = StreamInit(db.SongArtistName{
+			Artist: art.Name,
+			Song:   song,
+		})
+		if err == nil {
+			break
+		} else {
+			if err.Error() == CONNECTIONREFUSED {
+				nodes := GetNodes(server.Tracker, 7000)
+				if len(nodes) == 0 {
+					fmt.Println("NO NODES TO CONNECT")
+					break
+				} else {
+					known := &nodes[rand.Intn(len(nodes))]
+					server.Kademlia = known
+				}
+			} else {
+				break
+			}
+			fmt.Println(err.Error())
+		}
+	}
 }
 
 func StoreArtistHandler(w http.ResponseWriter, req *http.Request) {
@@ -94,10 +134,29 @@ func StoreSongHandler(w http.ResponseWriter, req *http.Request) {
 			Blocks: 0,
 		},
 	}
-	err = UploadInit(&song, filepath)
+	//cosa nueva
+	for {
+		err := UploadInit(&song, filepath)
+		if err == nil {
+			break
+		} else {
+			fmt.Println(err.Error())
+			if err.Error() == CONNECTIONREFUSED {
+				nodes := GetNodes(server.Tracker, 7000)
+				if len(nodes) == 0 {
+					fmt.Println("NO SERVER TO CONNECT")
+					break
+				} else {
+					known := &nodes[rand.Intn(len(nodes))]
+					server.Kademlia = known
+				}
+			} else {
+				break
+			}
+		}
+	}
 	var result *mongo.InsertOneResult
 	if err == nil {
-		log.Println("No error in Kademlia")
 		result, err = db.StoreSong(server.Database, song.Song)
 		if err != nil {
 			log.Fatal(err)
@@ -135,4 +194,26 @@ func getParameterFromQuery(req *http.Request, key string) string {
 		log.Fatalf("Parameter %s not in query", key)
 	}
 	return value[0]
+}
+
+func GetNodes(ip *net.IP, port int) []kademlia.Contact {
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/nodes", ip.String(), port))
+	if err != nil {
+		return []kademlia.Contact{}
+	}
+	data := []byte{}
+	buffer := make([]byte, 100)
+	for {
+		if n, _ := resp.Body.Read(buffer); n > 0 {
+			data = append(data, buffer[:n]...)
+		} else {
+			break
+		}
+	}
+	nodes := []kademlia.Contact{}
+	err = json.Unmarshal(data, &nodes)
+	if err == nil {
+		return nodes
+	}
+	return []kademlia.Contact{}
 }
