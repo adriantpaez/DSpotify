@@ -17,6 +17,7 @@ var stalker NetworkStalker
 
 type NetworkStalker struct {
 	CurrentBlocks chan *ReaderCloserBlock
+	Lock          bool
 }
 
 type ReaderCloserBlock struct {
@@ -39,11 +40,12 @@ func (rc *ReaderCloserBlock) Close() error {
 	return nil
 }
 
-func (ns *NetworkStalker) Stalk(metadata db.SongArtistName) {
+func (ns *NetworkStalker) Stalk(metadata db.SongArtistName, errChan *chan error) {
 	println(ns)
 	for i := 0; i < metadata.Song.Blocks; i++ {
 		var key kademlia.Key = sha1.Sum([]byte(fmt.Sprintf("%s-%s-%d", metadata.Song.Title, metadata.Artist, i)))
-		value := kademlia.SendFindValueNetwork(server.Kademlia, &key)
+		value, err := kademlia.SendFindValueNetwork(server.Kademlia, &key)
+		*errChan <- err
 		if len(value) == 0 {
 			fmt.Println("VALUE NOT FOUND")
 		}
@@ -55,22 +57,25 @@ func (ns *NetworkStalker) Stalk(metadata db.SongArtistName) {
 }
 
 func (ns *NetworkStalker) Next() *ReaderCloserBlock {
-	fmt.Println("NEXT")
-	println(ns)
-	fmt.Println(len(ns.CurrentBlocks))
-	return <-ns.CurrentBlocks
+	result := <-ns.CurrentBlocks
+	return result
+}
+
+func (ns *NetworkStalker) play() {
+	ns.Lock = false
+}
+
+func (ns *NetworkStalker) pause() {
+	ns.Lock = true
 }
 
 func (q *Queue) DecodeAndFill() {
-	fmt.Println("Before")
 	streamer, format, err := mp3.Decode(stalker.Next())
-	fmt.Println("After")
 	if err != nil {
 		fmt.Println(err)
 	}
 	resampled := beep.Resample(4, format.SampleRate, 44100, streamer)
 	q.Add(resampled)
-	fmt.Println("Add")
 }
 
 type Queue struct {
@@ -81,27 +86,39 @@ func (q *Queue) Add(streamers ...beep.Streamer) {
 	q.streamers = append(q.streamers, streamers...)
 }
 
-func StreamInit(metadata db.SongArtistName) {
+func Play() {
+	stalker.play()
+}
+func Pause() {
+	stalker.pause()
+}
+
+func StreamInit(metadata db.SongArtistName) error {
 	stalker = NetworkStalker{
 		CurrentBlocks: make(chan *ReaderCloserBlock, 3),
+		Lock:          false,
 	}
-	go stalker.Stalk(metadata)
+	var errChan chan error
+	go stalker.Stalk(metadata, &errChan)
+	if err := <-errChan; err != nil {
+		return err
+	}
 	sr := beep.SampleRate(44100)
 	err := speaker.Init(sr, sr.N(time.Second/10))
 	if err != nil {
 		log.Fatal(err)
 	}
 	var queue Queue
-	fmt.Println("HERE")
 	queue.DecodeAndFill()
 	speaker.Play(&queue)
 	time.Sleep(3 * time.Minute)
+	return nil
 }
 
 func (q *Queue) Stream(samples [][2]float64) (n int, ok bool) {
 	filled := 0
 	for filled < len(samples) {
-		if len(q.streamers) == 0 {
+		if len(q.streamers) == 0 || stalker.Lock {
 			for i := range samples[filled:] {
 				samples[i][0] = 0
 				samples[i][1] = 0

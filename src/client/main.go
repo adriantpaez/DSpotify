@@ -5,13 +5,12 @@ import (
 	"DSpotify/src/kademlia"
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"flag"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
+	"math/rand"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -20,8 +19,7 @@ func main() {
 	ipArg := flag.String("ip", "127.0.0.1", "The IP of the client.")
 	httpPort := flag.Int("port", 8081, "The port of the client")
 	DatabaseIp := flag.String("dbIp", "", "IP of known mongo Database server")
-	var knownFile = flag.String("known", "", "File with known contact for join to network.")
-	kademliaOutPort := flag.Int("kdOutPort", 0, "Port from which to connect to Kadamlia")
+	networkTracker := flag.String("trackerIp", "", "IP of network tracker")
 	DatabasePort := flag.Int("dbPort", 0, "Port of known Database server")
 	flag.Parse()
 	if *DatabaseIp == "" {
@@ -30,18 +28,16 @@ func main() {
 	if *DatabasePort == 0 {
 		log.Fatal("Empty Database port")
 	}
-	if *knownFile == "" {
-		log.Fatal("Empty known ontact file")
-	}
-	if *kademliaOutPort == 0 {
-		log.Fatal("Empty Kademlia out port")
+	if *networkTracker == "" {
+		log.Fatal("Empty Tracker IP")
 	}
 	ip := net.ParseIP(*ipArg)
+	networkTrackerIp := net.ParseIP(*networkTracker)
 	database, errD := establishDatabaseConnection(DatabaseIp, DatabasePort)
 	if errD != nil {
 		log.Println(errD.Error())
 	}
-	knownContact, errK := establishKademliaConnection(ip, kademliaOutPort, knownFile)
+	knownContact, errK := establishKademliaConnection(&networkTrackerIp)
 	if errK != nil {
 		log.Println(errK.Error())
 	}
@@ -53,6 +49,7 @@ func main() {
 		Port:     *httpPort,
 		Database: database,
 		Kademlia: knownContact,
+		Tracker:  &networkTrackerIp,
 	}
 	httpServer.Start()
 }
@@ -69,32 +66,20 @@ func establishDatabaseConnection(DatabaseIp *string, DatabasePort *int) (*mongo.
 	return client.Database("dspotify"), nil
 }
 
-func establishKademliaConnection(clientIp net.IP, kademliaOutPort *int, knownFile *string) (*kademlia.Contact, error) {
+func establishKademliaConnection(ip *net.IP) (*kademlia.Contact, error) {
 	var knownContact *kademlia.Contact
-	if *knownFile != "" {
-		file, err := os.Open(*knownFile)
-		if err != nil {
-			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
+	for {
+		nodes := httpserver.GetNodes(ip, 7000)
+		if len(nodes) == 0 {
+			log.Println("WARNING: Not nodes for join to network.")
+			break
+		} else {
+			knownContact = &nodes[rand.Intn(len(nodes))]
 		}
-		info, err := file.Stat()
-		if err != nil {
-			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
+		kademlia.InitClientsManager()
+		if kademlia.SendPingFromClient(knownContact) {
+			break
 		}
-		data := make([]byte, info.Size())
-		_, err = file.Read(data)
-		if err != nil {
-			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
-		}
-		c := kademlia.Contact{}
-		err = json.Unmarshal(data, &c)
-		if err != nil {
-			return nil, httpserver.ServerError{ErrorMessage: err.Error()}
-		}
-		knownContact = &c
-	}
-	kademlia.InitClientsManager()
-	if !kademlia.SendPingFromClient(knownContact) {
-		return knownContact, httpserver.ServerError{ErrorMessage: "HTTP SERVER COULD NOT CONNECT TO KADEMLIA NODE"}
 	}
 	return knownContact, nil
 }
