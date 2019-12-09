@@ -23,6 +23,10 @@ func (thisServer HttpServer) Start() {
 	for i := 0; i < len(endpoints); i++ {
 		http.HandleFunc(endpoints[i].Path, endpoints[i].Function)
 	}
+
+	fs := http.FileServer(http.Dir("interface"))
+	http.Handle("/", fs)
+
 	addr := net.TCPAddr{
 		IP:   thisServer.Host,
 		Port: thisServer.Port,

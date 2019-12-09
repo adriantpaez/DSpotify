@@ -1,3 +1,13 @@
+function httpGetAsync(theUrl, callback) {
+    var xmlHttp = new XMLHttpRequest();
+    xmlHttp.onreadystatechange = function () {
+        if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+            callback(xmlHttp.responseText);
+    };
+    xmlHttp.open("GET", theUrl, true); // true for asynchronous
+    xmlHttp.send(null);
+}
+
 app = new Vue({
     el: "#app",
     data: {
@@ -18,17 +28,20 @@ app = new Vue({
         },
         loadArtists() {
             console.log("Loading Artists");
-            // TODO: Get artists from client server
-            this.artists = artists;
-            console.log("Artists loaded");
-            this.showArtists = true;
+            httpGetAsync("/listArtists", (response) => {
+                    this.artists = JSON.parse(response);
+                    console.log("Artists loaded");
+                    this.showArtists = true;
+                }
+            );
         },
         // UPLOAD ARTIST
         uploadArtist() {
             this.upArtist = true;
             console.log("Uploading artis " + this.currentArtist);
-            //TODO: Upload new artist
-            console.log(name + " uploaded done");
+            httpGetAsync("/storeArtist?artist=" + this.currentArtist, (response) => {
+                console.log(name + " uploaded done");
+            });
             this.upArtist = false;
             this.initialState = true;
         },

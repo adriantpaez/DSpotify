@@ -31,14 +31,14 @@
 		<button class="btn-success btn" v-on:click="uploadArtist()">OK</button>
 		<button class="btn-danger btn" v-on:click="cancelUploadArtist()">Cancel</button>
 	</div>
-	<button class="btn-success btn" v-on:click="loadArtists">Load Artists</button>
+	<button class="btn-success btn" v-on:click="loadArtists()">Load Artists</button>
 
 	<!ARTISTS>
 	<div id="artistsList" v-if="showArtists">
 		<br>
 		<h2>Artists</h2>
 		<div v-for="artist in sortedArtists" v-bind:key="artist.id">
-			<h3 v-on:click="getSongs(artist)">{{artist.name}}</h3>
+			<h3 v-on:click="getSongs(artist)">{{artist}}</h3>
 		</div>
 	</div>
 
